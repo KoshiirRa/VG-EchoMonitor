@@ -30,9 +30,10 @@ When `BotExePath` is blank, EchoMonitor automatically launches `EchoMonitorBot.e
 ## Configuration
 
 Settings are loaded in order (later sources override earlier ones):
-1. `echomonitor_bot.json` (next to `EchoMonitorBot.exe` or current working directory)
-2. `.env` file
-3. Process environment variables
+1. `$XDG_CONFIG_HOME/echomonitor-bot/` (or `~/.config/echomonitor-bot/`) on Linux/macOS (`echomonitor_bot.json`, then `.env`)
+2. `echomonitor_bot.json` (next to the binary, then current working directory)
+3. `.env` file (next to the binary, then current working directory)
+4. Process environment variables
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
@@ -45,8 +46,27 @@ Settings are loaded in order (later sources override earlier ones):
 | `DIGEST_INTERVAL_MINUTES` | `60` | Minutes between periodic session digests (`0` disables) |
 | `MIN_LOOT_ALERT_RARITY` | `Exotic` | `Exotic`, `Legendary`, or `Off` |
 
-## Build & Publish (`win-x64`)
+## Build & Publish
 
 ```bash
+# Windows (x64)
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+
+# Linux (x64)
+dotnet publish -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true
 ```
+
+## Linux / Steam Deck (Proton)
+
+When running Vanguard Galaxy under Steam Proton, Proton shares the host network namespace, so a native Linux `EchoMonitorBot` connects directly to `http://127.0.0.1:8778`:
+
+1. Set `AutoLaunchBot = false` in `BepInEx/config/com.vanguardgalaxy.echomonitor.cfg`.
+2. Place the `linux-x64` `EchoMonitorBot` binary at `~/.local/bin/EchoMonitorBot` (`chmod +x ~/.local/bin/EchoMonitorBot`).
+3. Put your `echomonitor_bot.json` in `~/.config/echomonitor-bot/echomonitor_bot.json`.
+4. Optionally install the `systemd --user` unit from `echomonitor-bot.service.example`:
+   ```bash
+   mkdir -p ~/.config/systemd/user
+   cp echomonitor-bot.service.example ~/.config/systemd/user/echomonitor-bot.service
+   systemctl --user daemon-reload
+   systemctl --user enable --now echomonitor-bot.service
+   ```

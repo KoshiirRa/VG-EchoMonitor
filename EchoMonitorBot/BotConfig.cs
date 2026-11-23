@@ -44,15 +44,24 @@ public sealed class BotConfig
 
         string exeDir = AppContext.BaseDirectory;
         string cwd = Directory.GetCurrentDirectory();
+        var pathCmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+        // 0. On Linux/macOS, also check $XDG_CONFIG_HOME/echomonitor-bot (or ~/.config/echomonitor-bot)
+        string? xdgDir = GetXdgConfigDir();
+        if (!string.IsNullOrEmpty(xdgDir))
+        {
+            LoadJsonFile(Path.Combine(xdgDir, "echomonitor_bot.json"), values);
+            LoadDotEnv(Path.Combine(xdgDir, ".env"), values);
+        }
 
         // 1. Load echomonitor_bot.json (exe dir first, then CWD)
         LoadJsonFile(Path.Combine(exeDir, "echomonitor_bot.json"), values);
-        if (!string.Equals(exeDir.TrimEnd('\\', '/'), cwd.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(exeDir.TrimEnd('\\', '/'), cwd.TrimEnd('\\', '/'), pathCmp))
             LoadJsonFile(Path.Combine(cwd, "echomonitor_bot.json"), values);
 
         // 2. Load .env (exe dir first, then CWD)
         LoadDotEnv(Path.Combine(exeDir, ".env"), values);
-        if (!string.Equals(exeDir.TrimEnd('\\', '/'), cwd.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(exeDir.TrimEnd('\\', '/'), cwd.TrimEnd('\\', '/'), pathCmp))
             LoadDotEnv(Path.Combine(cwd, ".env"), values);
 
         // 3. Environment variables override file values
@@ -107,6 +116,16 @@ public sealed class BotConfig
             DigestIntervalMinutes = digestMins,
             MinLootAlertRarity = Get("MIN_LOOT_ALERT_RARITY", "Exotic")
         };
+    }
+
+    private static string? GetXdgConfigDir()
+    {
+        if (OperatingSystem.IsWindows()) return null;
+        string? xdg = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        if (!string.IsNullOrWhiteSpace(xdg))
+            return Path.Combine(xdg.Trim(), "echomonitor-bot");
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return string.IsNullOrEmpty(home) ? null : Path.Combine(home, ".config", "echomonitor-bot");
     }
 
     private static void LoadJsonFile(string path, Dictionary<string, string> target)

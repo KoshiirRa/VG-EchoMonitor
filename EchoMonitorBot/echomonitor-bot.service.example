@@ -1,0 +1,14 @@
+[Unit]
+Description=EchoMonitor Discord Companion Bot for Vanguard Galaxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/EchoMonitorBot
+WorkingDirectory=%h/.config/echomonitor-bot
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

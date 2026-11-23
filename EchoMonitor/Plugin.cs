@@ -66,8 +66,7 @@ namespace EchoMonitor
                 if (_config.OpenBrowserOnStart.Value)
                 {
                     string url = $"http://127.0.0.1:{_config.Port.Value}/";
-                    try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
-                    catch (Exception ex) { Log.LogWarning($"Could not open browser: {ex.Message}"); }
+                    TryOpenBrowser(url);
                 }
 
                 if (_config.AutoLaunchBot.Value)
@@ -183,6 +182,28 @@ namespace EchoMonitor
             return "{\"ok\":true}";
         }
 
+        private void TryOpenBrowser(string url)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                return;
+            }
+            catch (Exception ex)
+            {
+                if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo("xdg-open", url) { UseShellExecute = false });
+                        return;
+                    }
+                    catch { /* fall through to warning */ }
+                }
+                Log.LogWarning($"Could not open browser: {ex.Message}");
+            }
+        }
+
         private void TryLaunchCompanionBot()
         {
             try
@@ -200,13 +221,16 @@ namespace EchoMonitor
                     string pluginDir = Path.GetDirectoryName(Info.Location);
                     if (!string.IsNullOrEmpty(pluginDir))
                     {
-                        exePath = Path.Combine(pluginDir, "EchoMonitorBot.exe");
+                        bool isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
+                        string primary = Path.Combine(pluginDir, isWindows ? "EchoMonitorBot.exe" : "EchoMonitorBot");
+                        string fallback = Path.Combine(pluginDir, isWindows ? "EchoMonitorBot" : "EchoMonitorBot.exe");
+                        exePath = File.Exists(primary) ? primary : (File.Exists(fallback) ? fallback : primary);
                     }
                 }
 
                 if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath))
                 {
-                    Log.LogWarning($"AutoLaunchBot is enabled, but EchoMonitorBot.exe was not found at: {exePath}");
+                    Log.LogWarning($"AutoLaunchBot is enabled, but EchoMonitorBot was not found at: {exePath}");
                     return;
                 }
 

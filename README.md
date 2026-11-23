@@ -95,10 +95,20 @@ See [`EchoMonitorBot/README.md`](EchoMonitorBot/README.md) for all environment v
 cd EchoMonitor
 dotnet build -c Release -p:GameManagedDir="/path/to/VanguardGalaxy_Data/Managed"
 
-# Publish the standalone win-x64 Discord bot
+# Publish the standalone Discord bot (Windows or Linux)
 cd ../EchoMonitorBot
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true
 ```
+
+## Linux / Steam Deck (Proton)
+
+- **BepInEx under Proton:** Add the standard Steam launch option for Vanguard Galaxy:
+  ```bash
+  WINEDLLOVERRIDES="winhttp=n,b" %command%
+  ```
+- **Dashboard & Networking:** Proton shares the host network namespace, so `http://127.0.0.1:8778/` is directly accessible from your native Linux browser.
+- **Companion Bot:** Run the native `linux-x64` `EchoMonitorBot` binary on the Linux host (with `AutoLaunchBot = false` in EchoMonitor config). See [EchoMonitorBot/README.md](EchoMonitorBot/README.md) for XDG config paths and the `systemd --user` service template.
 
 ## Roadmap
 
@@ -107,6 +117,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - **Milestone 3 (Complete)** ✅ Empire Raid & Siege Detection + Warp to Defend + Standalone .NET 8 Discord Companion Bot (`EchoMonitorBot.exe`) with interactive alert buttons, slash commands, crash vs. clean-exit detection, and `AutoLaunchBot`.
 - **Milestone 4 (Planned)** ⏳ Empire Activity Tracking (materials refined, trade station profits, outpost production broken out alongside ECHO telemetry).
 - **Milestone 5 (Planned)** ⏳ Freeform ECHO Shopping Instructions (LLM-parsed shopping tours via Discord or Web UI with route preview, credit cap, and confirmation before execution).
+- **Milestone 6 (Planned — Possible Separate Mod: "Enhanced ECHO")** ⏳ Automated in-field drone loadout swapping for drone fleets — allow ECHO to automatically swap drones from a combat setup (laser/missile + target painter + shield repair) to a salvage setup (salvage laser + salvage harpoon) when wrecks are generated.
 
 ## AI / LLM Disclosure
 
