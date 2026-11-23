@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace EchoMonitorBot;
 
@@ -41,7 +42,7 @@ public static class Program
 
     private static readonly HashSet<(string Id, string TriggeredAt)> SeenAlerts = new();
     private static bool _seededLoot;
-    private static readonly Dictionary<(string Name, string Rarity, int ItemLevel), int> SeenModuleCounts = new();
+    private static readonly Dictionary<(string Name, string Rarity, int ItemLevel, string StatsSig), int> SeenModuleCounts = new();
     private static readonly HashSet<string> SeenReadyBps = new(StringComparer.OrdinalIgnoreCase);
 
     public static async Task<int> Main()
@@ -253,7 +254,7 @@ public static class Program
             {
                 foreach (var mod in newMods.EnumerateArray())
                 {
-                    var key = (GetStr(mod, "name"), GetStr(mod, "rarity"), GetInt(mod, "itemLevel"));
+                    var key = BuildModuleKey(mod);
                     SeenModuleCounts[key] = GetInt(mod, "gained");
                 }
             }
@@ -280,7 +281,7 @@ public static class Program
                 string rarity = GetStr(mod, "rarity", "Standard");
                 int ilvl = GetInt(mod, "itemLevel");
                 int gained = GetInt(mod, "gained");
-                var key = (name, rarity, ilvl);
+                var key = BuildModuleKey(mod);
 
                 int prev = SeenModuleCounts.GetValueOrDefault(key, 0);
                 if (gained > prev)
@@ -297,11 +298,29 @@ public static class Program
                             {
                                 if (count++ >= 6) break;
                                 if (s.ValueKind == JsonValueKind.String)
-                                    lines.Add($"- {s.GetString()}");
+                                {
+                                    string cleanSub = StripRichText(s.GetString() ?? string.Empty);
+                                    if (!string.IsNullOrEmpty(cleanSub))
+                                        lines.Add($"- {cleanSub}");
+                                }
+                            }
+                        }
+                        if (TryGetArr(mod, "aspects", out var aspects))
+                        {
+                            int count = 0;
+                            foreach (var a in aspects.EnumerateArray())
+                            {
+                                if (count++ >= 4) break;
+                                string aName = StripRichText(GetStr(a, "name"));
+                                string aDesc = StripRichText(GetStr(a, "description"));
+                                if (!string.IsNullOrEmpty(aName) && !string.IsNullOrEmpty(aDesc))
+                                    lines.Add($"• **{aName}** — {aDesc}");
+                                else if (!string.IsNullOrEmpty(aName))
+                                    lines.Add($"• **{aName}**");
                             }
                         }
                         int color = RarityColors.GetValueOrDefault(rarity, 0xA855F7);
-                        var embed = MakeEmbed($"Rare Loot Drop — {rarity}", string.Join("\n", lines), color);
+                        var embed = MakeEmbed($"Rare Loot Drop — {rarity}", Truncate(string.Join("\n", lines), 4000), color);
                         await _discord.PostChannelMessageAsync(embed, ct: ct);
                     }
                 }
@@ -807,4 +826,36 @@ public static class Program
 
     private static string Truncate(string s, int maxLen) =>
         string.IsNullOrEmpty(s) || s.Length <= maxLen ? s : s[..maxLen];
+
+    private static string StripRichText(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        return Regex.Replace(s, "<[^>]+>", string.Empty).Trim();
+    }
+
+    private static (string Name, string Rarity, int ItemLevel, string StatsSig) BuildModuleKey(JsonElement mod)
+    {
+        string name = GetStr(mod, "name");
+        string rarity = GetStr(mod, "rarity");
+        int ilvl = GetInt(mod, "itemLevel");
+
+        var parts = new List<string>();
+        if (TryGetArr(mod, "substats", out var subs))
+        {
+            foreach (var s in subs.EnumerateArray())
+            {
+                if (s.ValueKind == JsonValueKind.String)
+                    parts.Add("S:" + (s.GetString() ?? string.Empty));
+            }
+        }
+        if (TryGetArr(mod, "aspects", out var aspects))
+        {
+            foreach (var a in aspects.EnumerateArray())
+            {
+                parts.Add("A:" + GetStr(a, "name") + ":" + GetStr(a, "description"));
+            }
+        }
+
+        return (name, rarity, ilvl, string.Join("|", parts));
+    }
 }

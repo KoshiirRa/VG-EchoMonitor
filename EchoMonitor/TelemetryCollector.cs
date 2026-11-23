@@ -516,12 +516,14 @@ namespace EchoMonitor
                             string rarity = item.rarity.ToString();
                             int ilvl = item.itemLevel;
                             string eqType = item.equipmentDefinition.name ?? string.Empty;
-                            string key = $"{name}{SessionManager.KeySep}{rarity}{SessionManager.KeySep}{ilvl}{SessionManager.KeySep}{eqType}";
-                            snap.Modules[key] = snap.Modules.TryGetValue(key, out int prev) ? prev + slot.count : slot.count;
 
+                            ExtractModuleDetails(item, out var substats, out var aspects);
+                            string sig = ComputeModuleSignature(substats, aspects);
+                            string key = $"{name}{SessionManager.KeySep}{rarity}{SessionManager.KeySep}{ilvl}{SessionManager.KeySep}{eqType}{SessionManager.KeySep}{sig}";
+
+                            snap.Modules[key] = snap.Modules.TryGetValue(key, out int prev) ? prev + slot.count : slot.count;
                             if (!snap.ModuleSubstats.ContainsKey(key))
                             {
-                                ExtractModuleDetails(item, out var substats, out var aspects);
                                 snap.ModuleSubstats[key] = substats;
                                 snap.ModuleAspects[key] = aspects;
                             }
@@ -684,6 +686,40 @@ namespace EchoMonitor
                 }
             }
             catch { }
+        }
+
+        private static string ComputeModuleSignature(List<string> substats, List<ModuleAspectInfo> aspects)
+        {
+            unchecked
+            {
+                ulong hash = 14695981039346656037UL;
+                void Feed(string s)
+                {
+                    if (string.IsNullOrEmpty(s)) return;
+                    for (int i = 0; i < s.Length; i++)
+                    {
+                        hash ^= s[i];
+                        hash *= 1099511628211UL;
+                    }
+                    hash ^= 0x1F;
+                    hash *= 1099511628211UL;
+                }
+
+                if (substats != null)
+                {
+                    for (int i = 0; i < substats.Count; i++) Feed(substats[i]);
+                }
+                Feed("|");
+                if (aspects != null)
+                {
+                    for (int i = 0; i < aspects.Count; i++)
+                    {
+                        Feed(aspects[i]?.Name);
+                        Feed(aspects[i]?.Description);
+                    }
+                }
+                return hash.ToString("x16");
+            }
         }
 
         private static string ResolveSaveId(GamePlayer gp)
