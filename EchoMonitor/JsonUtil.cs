@@ -134,6 +134,8 @@ namespace EchoMonitor
             sb.Append(",\"uploadedBlueprints\":"); AppendStringIntDict(sb, s.UploadedBlueprints);
             sb.Append(",\"officerLevels\":"); AppendStringIntDict(sb, s.OfficerLevels);
             sb.Append(",\"lockedCrates\":"); AppendStringIntDict(sb, s.LockedCrates);
+            sb.Append(",\"depotRawMaterials\":"); AppendStringIntDict(sb, s.DepotRawMaterials);
+            sb.Append(",\"depotRefinedProducts\":"); AppendStringIntDict(sb, s.DepotRefinedProducts);
             sb.Append(",\"capturedShips\":{");
             if (s.CapturedShips != null)
             {
@@ -183,6 +185,8 @@ namespace EchoMonitor
                 UploadedBlueprints = GetStringIntDict(root, "uploadedBlueprints"),
                 OfficerLevels = GetStringIntDict(root, "officerLevels"),
                 LockedCrates = GetStringIntDict(root, "lockedCrates"),
+                DepotRawMaterials = GetStringIntDict(root, "depotRawMaterials"),
+                DepotRefinedProducts = GetStringIntDict(root, "depotRefinedProducts"),
                 CapturedShips = new Dictionary<string, CapturedShipInfo>()
             };
 
@@ -299,6 +303,7 @@ namespace EchoMonitor
             HangarBayStatus hangarBay,
             List<FleetShipInfo> fleet,
             AlertsStatus alerts,
+            EmpireStatus empire,
             List<MissionLogEntry> missionLog,
             PlayerSnapshot current,
             PlayerSnapshot baseline,
@@ -434,6 +439,16 @@ namespace EchoMonitor
                 sb.Append("]}");
             }
 
+            sb.Append(",\"empire\":");
+            if (empire == null)
+            {
+                sb.Append("null");
+            }
+            else
+            {
+                AppendEmpireStatus(sb, empire);
+            }
+
             sb.Append(",\"missionLog\":");
             if (missionLog == null)
             {
@@ -520,6 +535,82 @@ namespace EchoMonitor
                 }
             }
             sb.Append("]}");
+        }
+
+        private static void AppendEmpireStatus(StringBuilder sb, EmpireStatus e)
+        {
+            sb.Append("{\"outposts\":[");
+            if (e.Outposts != null)
+            {
+                for (int i = 0; i < e.Outposts.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    var op = e.Outposts[i];
+                    sb.Append("{\"stationGuid\":"); AppendString(sb, op.StationGuid);
+                    sb.Append(",\"name\":"); AppendString(sb, op.Name);
+                    sb.Append(",\"sectorName\":"); AppendString(sb, op.SectorName);
+                    sb.Append(",\"systemName\":"); AppendString(sb, op.SystemName);
+                    sb.Append(",\"stationType\":"); AppendString(sb, op.StationType);
+                    sb.Append(",\"tier\":"); sb.Append(op.Tier.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"spaceUsed\":"); AppendDouble(sb, op.SpaceUsed);
+                    sb.Append(",\"capacity\":"); AppendDouble(sb, op.Capacity);
+                    sb.Append(",\"fillPct\":"); AppendDouble(sb, op.FillPct);
+                    sb.Append(",\"hasActiveDepot\":"); AppendBool(sb, op.HasActiveDepot);
+                    sb.Append(",\"largestStackItemId\":"); AppendString(sb, op.LargestStackItemId);
+                    sb.Append(",\"largestStackItemName\":"); AppendString(sb, op.LargestStackItemName);
+                    sb.Append(",\"largestStackCount\":"); sb.Append(op.LargestStackCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"largestStackM3\":"); AppendDouble(sb, op.LargestStackM3);
+                    sb.Append('}');
+                }
+            }
+            sb.Append("],\"depotCount\":"); sb.Append(e.DepotCount.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"depotSpaceUsed\":"); AppendDouble(sb, e.DepotSpaceUsed);
+            sb.Append(",\"depotCapacity\":"); AppendDouble(sb, e.DepotCapacity);
+            sb.Append(",\"depotFillPct\":"); AppendDouble(sb, e.DepotFillPct);
+            sb.Append(",\"rawBacklogTotal\":"); sb.Append(e.RawBacklogTotal.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"rawBacklogDelta\":"); sb.Append(e.RawBacklogDelta.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"rawBacklogRatePerHour\":"); AppendDouble(sb, e.RawBacklogRatePerHour);
+            sb.Append(",\"rawBacklogItems\":"); AppendDepotMaterialList(sb, e.RawBacklogItems);
+            sb.Append(",\"refinedStockTotal\":"); sb.Append(e.RefinedStockTotal.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"refinedStockDelta\":"); sb.Append(e.RefinedStockDelta.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"refinedStockRatePerHour\":"); AppendDouble(sb, e.RefinedStockRatePerHour);
+            sb.Append(",\"refinedStockItems\":"); AppendDepotMaterialList(sb, e.RefinedStockItems);
+            sb.Append(",\"activity\":");
+            var act = e.Activity ?? new EmpireActivityDelta();
+            sb.Append("{\"refinedTotal\":"); sb.Append(act.RefinedTotal.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"refinedByItem\":"); AppendStringIntDict(sb, act.RefinedByItem);
+            sb.Append(",\"tradeRuns\":"); sb.Append(act.TradeRuns.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"tradeEarned\":"); sb.Append(act.TradeEarned.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"tradeSpent\":"); sb.Append(act.TradeSpent.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"tradeProfit\":"); sb.Append(act.TradeProfit.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"stationSalesCredits\":"); sb.Append(act.StationSalesCredits.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"outpostProducedTotal\":"); sb.Append(act.OutpostProducedTotal.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"outpostProducedByItem\":"); AppendStringIntDict(sb, act.OutpostProducedByItem);
+            sb.Append(",\"craftedTotal\":"); sb.Append(act.CraftedTotal.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"craftedByItem\":"); AppendStringIntDict(sb, act.CraftedByItem);
+            sb.Append("}}");
+        }
+
+        private static void AppendDepotMaterialList(StringBuilder sb, List<DepotMaterialEntry> list)
+        {
+            sb.Append('[');
+            if (list != null)
+            {
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    var item = list[i];
+                    sb.Append("{\"itemId\":"); AppendString(sb, item.ItemId);
+                    sb.Append(",\"name\":"); AppendString(sb, item.Name);
+                    sb.Append(",\"category\":"); AppendString(sb, item.Category);
+                    sb.Append(",\"baseline\":"); sb.Append(item.Baseline.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"current\":"); sb.Append(item.Current.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"delta\":"); sb.Append(item.Delta.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"ratePerHour\":"); AppendDouble(sb, item.RatePerHour);
+                    sb.Append('}');
+                }
+            }
+            sb.Append(']');
         }
 
         private static void AppendSnapshotSummary(StringBuilder sb, PlayerSnapshot s)
@@ -720,6 +811,9 @@ namespace EchoMonitor
             sb.Append(",\"targetStation\":"); AppendString(sb, r?.TargetStation ?? string.Empty);
             sb.Append(",\"abandonedMission\":"); AppendString(sb, r?.AbandonedMission ?? string.Empty);
             sb.Append(",\"echoEnabled\":"); AppendBool(sb, r != null && r.EchoEnabled);
+            sb.Append(",\"itemName\":"); AppendString(sb, r?.ItemName ?? string.Empty);
+            sb.Append(",\"movedCount\":"); sb.Append((r?.MovedCount ?? 0).ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"newFillPct\":"); AppendDouble(sb, r?.NewFillPct ?? 0.0);
             sb.Append('}');
             return sb.ToString();
         }

@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Reflection;
+using Behaviour.Item;
 using HarmonyLib;
+using Source.Galaxy.POI;
+using Source.Galaxy.Trade;
 using Source.MissionSystem;
+using Source.SpaceShip;
 using Source.Util;
 
 namespace EchoMonitor.Patches
@@ -13,6 +18,11 @@ namespace EchoMonitor.Patches
         public static string LastIdleRawKey { get; private set; } = string.Empty;
         public static Action<string, string> OnPlayerEmergencyWarp { get; set; }
         public static Action<MissionLogEntry> OnMissionEvent { get; set; }
+        public static Action<string, int> OnEmpireRefined { get; set; }
+        public static Action<string, int> OnEmpireProduced { get; set; }
+        public static Action<string, int> OnEmpireCrafted { get; set; }
+        public static Action<long, long, long> OnEmpireTradeRun { get; set; }
+        public static Action<long> OnEmpireSale { get; set; }
 
         private static readonly ConcurrentDictionary<Mission, string> PendingFailReasons = new ConcurrentDictionary<Mission, string>();
 
@@ -47,6 +57,31 @@ namespace EchoMonitor.Patches
                 harmony,
                 AccessTools.Method("Source.MissionSystem.Mission:MissionFailed", new[] { typeof(string) }),
                 postfix: new HarmonyMethod(typeof(EchoPatches), nameof(MissionFailedPostfix)));
+
+            TryPatch(
+                harmony,
+                AccessTools.Method("Source.Galaxy.EmpireLogStations:OnRefined", new[] { typeof(PlayerStation), typeof(InventoryItemType), typeof(int) }),
+                postfix: new HarmonyMethod(typeof(EchoPatches), nameof(EmpireOnRefinedPostfix)));
+
+            TryPatch(
+                harmony,
+                AccessTools.Method("Source.Galaxy.EmpireLogStations:OnWorkBayDelivered"),
+                postfix: new HarmonyMethod(typeof(EchoPatches), nameof(EmpireOnWorkBayDeliveredPostfix)));
+
+            TryPatch(
+                harmony,
+                AccessTools.Method("Source.Galaxy.EmpireLogStations:OnTradeRunFinished", new[] { typeof(PlayerStation), typeof(SpaceShipData), typeof(TradeRun) }),
+                postfix: new HarmonyMethod(typeof(EchoPatches), nameof(EmpireOnTradeRunFinishedPostfix)));
+
+            TryPatch(
+                harmony,
+                AccessTools.Method("Source.Galaxy.EmpireLogStations:OnSale", new[] { typeof(PlayerStation), typeof(long) }),
+                postfix: new HarmonyMethod(typeof(EchoPatches), nameof(EmpireOnSalePostfix)));
+
+            TryPatch(
+                harmony,
+                AccessTools.Method("Source.Galaxy.EmpireLogStations:OnCrafted", new[] { typeof(PlayerStation), typeof(InventoryItemType), typeof(int) }),
+                postfix: new HarmonyMethod(typeof(EchoPatches), nameof(EmpireOnCraftedPostfix)));
         }
 
         private static void TryPatch(Harmony harmony, MethodBase target, HarmonyMethod postfix)
@@ -141,6 +176,73 @@ namespace EchoMonitor.Patches
                     IsStory = !string.IsNullOrWhiteSpace(mission.storyId),
                     Reason = translatedReason
                 });
+            }
+            catch { }
+        }
+
+        private static string ResolveItemName(InventoryItemType item)
+        {
+            if (item == null) return "Unknown";
+            string raw = !string.IsNullOrEmpty(item.displayName) ? item.displayName : item.identifier;
+            if (string.IsNullOrEmpty(raw)) return "Unknown";
+            return raw.StartsWith("@", StringComparison.Ordinal) ? (Translation.Translate(raw) ?? raw) : raw;
+        }
+
+        private static void EmpireOnRefinedPostfix(PlayerStation station, InventoryItemType ore, int amount)
+        {
+            if (station == null || ore == null || amount <= 0 || OnEmpireRefined == null) return;
+            try
+            {
+                OnEmpireRefined.Invoke(ResolveItemName(ore), amount);
+            }
+            catch { }
+        }
+
+        private static void EmpireOnWorkBayDeliveredPostfix(PlayerStation station, IEnumerable<(InventoryItemType item, int amount)> gathered)
+        {
+            if (station == null || gathered == null || OnEmpireProduced == null) return;
+            try
+            {
+                foreach (var (item, amount) in gathered)
+                {
+                    if (item != null && amount > 0)
+                    {
+                        OnEmpireProduced.Invoke(ResolveItemName(item), amount);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void EmpireOnTradeRunFinishedPostfix(PlayerStation station, SpaceShipData ship, TradeRun run)
+        {
+            if (station == null || run == null || OnEmpireTradeRun == null) return;
+            try
+            {
+                if (run.earned > 0 || run.spent > 0)
+                {
+                    OnEmpireTradeRun.Invoke(run.earned, run.spent, run.profit);
+                }
+            }
+            catch { }
+        }
+
+        private static void EmpireOnSalePostfix(PlayerStation station, long credits)
+        {
+            if (station == null || credits <= 0 || OnEmpireSale == null) return;
+            try
+            {
+                OnEmpireSale.Invoke(credits);
+            }
+            catch { }
+        }
+
+        private static void EmpireOnCraftedPostfix(PlayerStation station, InventoryItemType item, int amount)
+        {
+            if (station == null || item == null || amount <= 0 || OnEmpireCrafted == null) return;
+            try
+            {
+                OnEmpireCrafted.Invoke(ResolveItemName(item), amount);
             }
             catch { }
         }

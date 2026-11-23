@@ -5,7 +5,10 @@ using Behaviour.Managers;
 using Behaviour.Util;
 using Source.Galaxy;
 using Source.Galaxy.POI;
+using Source.Galaxy.Trade;
+using Source.Item;
 using Source.Player;
+using Source.Util;
 
 namespace EchoMonitor
 {
@@ -17,6 +20,9 @@ namespace EchoMonitor
         public string TargetStation { get; set; } = string.Empty;
         public string AbandonedMission { get; set; } = string.Empty;
         public bool EchoEnabled { get; set; }
+        public string ItemName { get; set; } = string.Empty;
+        public int MovedCount { get; set; }
+        public double NewFillPct { get; set; }
     }
 
     public static class RecoveryController
@@ -336,6 +342,167 @@ namespace EchoMonitor
                 Message = $"Warping to defend {stName} in {sysName}.",
                 TargetSystem = sysName,
                 TargetStation = stName,
+                EchoEnabled = gp.autoPlay
+            };
+        }
+
+        /// <summary>
+        /// Moves half (floor(count / 2)) of the single largest item stack in the target outpost
+        /// back to its sector's Supply Depot (falling back to homeStation if no depot is set).
+        /// Must ONLY be called on the Unity main thread.
+        /// </summary>
+        public static RecoveryResult RelieveOutpostStorage(string stationGuid, StuckDetector detector)
+        {
+            var gp = GamePlayer.current;
+            if (gp == null)
+            {
+                return new RecoveryResult { Ok = false, Message = "Not currently in game." };
+            }
+
+            PlayerStation target = null;
+            double bestFill = -1.0;
+
+            foreach (var st in PlayerStation.GetAllOwned())
+            {
+                if (st == null || st.materialStorage == null) continue;
+                if (!string.IsNullOrEmpty(stationGuid))
+                {
+                    if (string.Equals(st.guid, stationGuid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        target = st;
+                        break;
+                    }
+                }
+                else
+                {
+                    double cap = st.materialStorage.capacity;
+                    double fill = cap > 0 ? (st.materialStorage.spaceUsed / cap) * 100.0 : 0.0;
+                    if (fill > bestFill)
+                    {
+                        bestFill = fill;
+                        target = st;
+                    }
+                }
+            }
+
+            if (target == null)
+            {
+                return new RecoveryResult
+                {
+                    Ok = false,
+                    Message = string.IsNullOrEmpty(stationGuid)
+                        ? "No player outposts found."
+                        : $"Outpost '{stationGuid}' not found.",
+                    EchoEnabled = gp.autoPlay
+                };
+            }
+
+            SpaceStation depot = SupplyNetwork.GetActiveDepot(target.system?.sector)
+                ?? SupplyNetwork.GetDepot(target.system?.sector)
+                ?? gp.homeStation;
+
+            if (depot == null || depot.materialStorage == null)
+            {
+                return new RecoveryResult
+                {
+                    Ok = false,
+                    Message = $"No active supply depot or home station found for {target.name}.",
+                    TargetStation = target.name ?? string.Empty,
+                    TargetSystem = target.system?.name ?? string.Empty,
+                    EchoEnabled = gp.autoPlay
+                };
+            }
+
+            if (depot == target)
+            {
+                return new RecoveryResult
+                {
+                    Ok = false,
+                    Message = $"{target.name} is already the depot.",
+                    TargetStation = target.name ?? string.Empty,
+                    TargetSystem = target.system?.name ?? string.Empty,
+                    EchoEnabled = gp.autoPlay
+                };
+            }
+
+            Inventory.InventoryItem largest = null;
+            float largestM3 = -1f;
+            int largestCount = 0;
+            foreach (var entry in target.materialStorage.items)
+            {
+                if (entry == null || entry.item == null || entry.count < 2) continue;
+                float m3 = entry.spaceRequired;
+                if (m3 > largestM3 || (Math.Abs(m3 - largestM3) < 0.001f && entry.count > largestCount))
+                {
+                    largest = entry;
+                    largestM3 = m3;
+                    largestCount = entry.count;
+                }
+            }
+
+            if (largest == null)
+            {
+                return new RecoveryResult
+                {
+                    Ok = false,
+                    Message = $"No stack with >= 2 items found in {target.name} to transfer.",
+                    TargetStation = target.name ?? string.Empty,
+                    TargetSystem = target.system?.name ?? string.Empty,
+                    EchoEnabled = gp.autoPlay
+                };
+            }
+
+            int moveCount = largest.count / 2;
+            float itemM3 = largest.item.m3 > 0f ? largest.item.m3 : 1f;
+            float depotAvail = depot.materialStorage.GetSpaceAvailable();
+            int maxFit = (int)Math.Floor(depotAvail / itemM3);
+            if (maxFit <= 0)
+            {
+                return new RecoveryResult
+                {
+                    Ok = false,
+                    Message = $"Depot '{depot.name}' does not have enough free space ({depotAvail:N0} m³ available).",
+                    TargetStation = target.name ?? string.Empty,
+                    TargetSystem = target.system?.name ?? string.Empty,
+                    EchoEnabled = gp.autoPlay
+                };
+            }
+            if (moveCount > maxFit) moveCount = maxFit;
+
+            string rawItemName = !string.IsNullOrEmpty(largest.item.displayName)
+                ? largest.item.displayName
+                : largest.item.identifier;
+            string itemName = !string.IsNullOrEmpty(rawItemName) && rawItemName.StartsWith("@", StringComparison.Ordinal)
+                ? (Translation.Translate(rawItemName) ?? rawItemName)
+                : (rawItemName ?? "Unknown");
+
+            int removed = target.materialStorage.Remove(largest.item, moveCount);
+            if (removed <= 0)
+            {
+                return new RecoveryResult
+                {
+                    Ok = false,
+                    Message = $"Failed to remove {moveCount:N0}x {itemName} from {target.name}.",
+                    TargetStation = target.name ?? string.Empty,
+                    TargetSystem = target.system?.name ?? string.Empty,
+                    EchoEnabled = gp.autoPlay
+                };
+            }
+
+            depot.materialStorage.Add(largest.item, removed);
+
+            double capAfter = target.materialStorage.capacity;
+            double newFillPct = capAfter > 0 ? Math.Round((target.materialStorage.spaceUsed / capAfter) * 100.0, 1) : 0.0;
+
+            return new RecoveryResult
+            {
+                Ok = true,
+                Message = $"Moved {removed:N0}x {itemName} from {target.name} → {depot.name}. {target.name} is now at {newFillPct:F1}%.",
+                TargetStation = target.name ?? string.Empty,
+                TargetSystem = target.system?.name ?? string.Empty,
+                ItemName = itemName,
+                MovedCount = removed,
+                NewFillPct = newFillPct,
                 EchoEnabled = gp.autoPlay
             };
         }

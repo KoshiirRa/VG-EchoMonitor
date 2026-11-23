@@ -13,11 +13,14 @@ namespace EchoMonitor
     {
         private static readonly TimeSpan EmergencyWarpWindow = TimeSpan.FromMinutes(15);
         private const int EmergencyWarpThreshold = 2;
+        private const double OutpostFullTriggerPct = 95.0;
+        private const double OutpostFullClearPct = 90.0;
 
         private readonly object _lock = new object();
         private readonly List<(DateTime TimeUtc, string Poi, string Mission)> _emergencyWarps = new List<(DateTime, string, string)>();
         private readonly HashSet<string> _dismissedKeys = new HashSet<string>(StringComparer.Ordinal);
         private readonly Dictionary<string, DateTime> _battleFirstSeenUtc = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        private readonly Dictionary<string, DateTime> _outpostFullFirstSeenUtc = new Dictionary<string, DateTime>(StringComparer.Ordinal);
 
         private string _badStationKey = string.Empty;
         private DateTime _badStationFirstSeenUtc = DateTime.MinValue;
@@ -45,6 +48,10 @@ namespace EchoMonitor
                 {
                     _dismissedKeys.Add("empire_raid_" + bid);
                 }
+                foreach (var guid in _outpostFullFirstSeenUtc.Keys)
+                {
+                    _dismissedKeys.Add("outpost_storage_full:" + guid);
+                }
             }
         }
 
@@ -55,6 +62,7 @@ namespace EchoMonitor
                 _emergencyWarps.Clear();
                 _dismissedKeys.Clear();
                 _battleFirstSeenUtc.Clear();
+                _outpostFullFirstSeenUtc.Clear();
                 _badStationKey = string.Empty;
                 _badStationFirstSeenUtc = DateTime.MinValue;
                 _lastEmergencyLoopKey = string.Empty;
@@ -64,7 +72,7 @@ namespace EchoMonitor
         /// <summary>
         /// Must ONLY be called on the Unity main thread.
         /// </summary>
-        public AlertsStatus Evaluate(GamePlayer gp, Behaviour.Unit.SpaceShip ship)
+        public AlertsStatus Evaluate(GamePlayer gp, Behaviour.Unit.SpaceShip ship, List<OutpostStorageInfo> outposts = null)
         {
             var status = new AlertsStatus();
             if (gp == null) return status;
@@ -202,9 +210,93 @@ namespace EchoMonitor
             // 3. Check for active Empire Raid / Siege on player-owned stations
             EvaluateEmpireRaids(gp, now, activeItems);
 
+            // 4. Check for player outposts at >= 95% storage capacity
+            EvaluateOutpostStorage(outposts, now, activeItems);
+
             status.Items = activeItems;
             status.Stuck = activeItems.Count > 0;
             return status;
+        }
+
+        private void EvaluateOutpostStorage(List<OutpostStorageInfo> outposts, DateTime now, List<AlertItem> activeItems)
+        {
+            if (outposts == null) return;
+            try
+            {
+                var seenGuids = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var op in outposts)
+                {
+                    if (op == null || string.IsNullOrEmpty(op.StationGuid)) continue;
+                    seenGuids.Add(op.StationGuid);
+
+                    string alertId = "outpost_storage_full:" + op.StationGuid;
+                    bool shouldEmit = false;
+                    DateTime firstSeen = now;
+
+                    lock (_lock)
+                    {
+                        bool alreadyTracked = _outpostFullFirstSeenUtc.TryGetValue(op.StationGuid, out firstSeen);
+                        if (op.FillPct >= OutpostFullTriggerPct)
+                        {
+                            if (!alreadyTracked)
+                            {
+                                firstSeen = now;
+                                _outpostFullFirstSeenUtc[op.StationGuid] = firstSeen;
+                                _dismissedKeys.Remove(alertId);
+                            }
+                            shouldEmit = !_dismissedKeys.Contains(alertId);
+                        }
+                        else if (op.FillPct < OutpostFullClearPct)
+                        {
+                            if (alreadyTracked)
+                            {
+                                _outpostFullFirstSeenUtc.Remove(op.StationGuid);
+                                _dismissedKeys.Remove(alertId);
+                            }
+                        }
+                        else if (alreadyTracked)
+                        {
+                            // Hysteresis band (90%..95%): stay active until below 90%
+                            shouldEmit = !_dismissedKeys.Contains(alertId);
+                        }
+                    }
+
+                    if (!shouldEmit) continue;
+
+                    string loc = !string.IsNullOrEmpty(op.SectorName) && !string.IsNullOrEmpty(op.SystemName)
+                        ? $"{op.SectorName} / {op.SystemName}"
+                        : (!string.IsNullOrEmpty(op.SystemName) ? op.SystemName : op.SectorName);
+                    string stackInfo = op.LargestStackCount > 0
+                        ? $" Largest stack: {op.LargestStackCount:N0}x {op.LargestStackItemName} ({op.LargestStackM3:N0} m³)."
+                        : string.Empty;
+
+                    activeItems.Add(new AlertItem
+                    {
+                        Id = alertId,
+                        Type = "OutpostStorageFull",
+                        Severity = "warning",
+                        Title = $"Outpost Storage Full ({op.FillPct:F0}%): {op.Name}",
+                        Detail = $"{loc} — {op.SpaceUsed:N0}/{op.Capacity:N0} m³.{stackInfo}",
+                        TriggeredAt = firstSeen.ToString("o")
+                    });
+                }
+
+                // Prune outposts that no longer exist
+                lock (_lock)
+                {
+                    var removed = new List<string>();
+                    foreach (var guid in _outpostFullFirstSeenUtc.Keys)
+                    {
+                        if (!seenGuids.Contains(guid)) removed.Add(guid);
+                    }
+                    foreach (var guid in removed)
+                    {
+                        _outpostFullFirstSeenUtc.Remove(guid);
+                        _dismissedKeys.Remove("outpost_storage_full:" + guid);
+                    }
+                }
+            }
+            catch { }
         }
 
         private void EvaluateEmpireRaids(GamePlayer gp, DateTime now, List<AlertItem> activeItems)

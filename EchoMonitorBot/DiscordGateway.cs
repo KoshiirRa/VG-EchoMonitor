@@ -294,6 +294,7 @@ public sealed class DiscordGateway : IDisposable
             MakeCommand("fleet", "Show active fleet ships, vitals, stance, and drone status."),
             MakeCommand("loot", "Show session modules by rarity, locked crates, and ready ship BPs."),
             MakeCommand("missions", "Show the last 10 entries from the EchoMonitor mission log."),
+            MakeCommand("empire", "Show outpost storage, refining output, depot backlog, and refined products."),
             MakeCommand("recover", "Open an ephemeral recovery control panel."),
             MakeCommand("reset_session", "Reset the EchoMonitor session baseline (allowed users only).")
         };

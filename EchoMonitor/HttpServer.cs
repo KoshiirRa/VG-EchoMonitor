@@ -24,6 +24,7 @@ namespace EchoMonitor
         private readonly Func<string> _abandonMissionJson;
         private readonly Func<string> _warpDefendJson;
         private readonly Func<string> _dismissAlertsJson;
+        private readonly Func<string, string> _relieveOutpostJson;
 
         private HttpListener _listener;
         private CancellationTokenSource _cts;
@@ -42,7 +43,8 @@ namespace EchoMonitor
             Func<string> toggleEchoJson,
             Func<string> abandonMissionJson,
             Func<string> warpDefendJson,
-            Func<string> dismissAlertsJson)
+            Func<string> dismissAlertsJson,
+            Func<string, string> relieveOutpostJson)
         {
             _config = config;
             _getStateJson = getStateJson;
@@ -55,6 +57,7 @@ namespace EchoMonitor
             _abandonMissionJson = abandonMissionJson;
             _warpDefendJson = warpDefendJson;
             _dismissAlertsJson = dismissAlertsJson;
+            _relieveOutpostJson = relieveOutpostJson;
         }
 
         public string Prefix { get; private set; }
@@ -258,6 +261,26 @@ namespace EchoMonitor
                     if (path.Equals("/api/alerts/dismiss", StringComparison.OrdinalIgnoreCase))
                     {
                         WriteJson(resp, 200, _dismissAlertsJson());
+                        return;
+                    }
+                    if (path.Equals("/api/action/relieve-outpost", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string stationGuid = req.QueryString["stationGuid"] ?? string.Empty;
+                        if (string.IsNullOrEmpty(stationGuid) && req.HasEntityBody)
+                        {
+                            try
+                            {
+                                using var reader = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
+                                string body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                                if (JsonUtil.Parse(body) is System.Collections.Generic.Dictionary<string, object> obj &&
+                                    obj.TryGetValue("stationGuid", out var val) && val != null)
+                                {
+                                    stationGuid = val.ToString();
+                                }
+                            }
+                            catch { }
+                        }
+                        WriteJson(resp, 200, _relieveOutpostJson(stationGuid));
                         return;
                     }
                 }

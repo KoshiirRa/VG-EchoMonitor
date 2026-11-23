@@ -10,6 +10,8 @@ using EchoMonitor.Patches;
 using HarmonyLib;
 using LightJson;
 using Source.Galaxy;
+using Source.Galaxy.POI;
+using Source.Galaxy.Trade;
 using Source.Item;
 using Source.MissionSystem;
 using Source.Player;
@@ -49,8 +51,9 @@ namespace EchoMonitor
             var droneBay = CollectDroneBayStatus(ship);
             var hangarBay = CollectHangarBayStatus(ship);
             var fleet = CollectFleetStatus(gp, ship);
-            var alerts = stuckDetector != null ? stuckDetector.Evaluate(gp, ship) : new AlertsStatus();
             var snapshot = CollectPlayerSnapshot(gp);
+            var empire = CollectEmpireStatus(gp, snapshot);
+            var alerts = stuckDetector != null ? stuckDetector.Evaluate(gp, ship, empire?.Outposts) : new AlertsStatus();
 
             return new LiveTelemetry
             {
@@ -61,8 +64,137 @@ namespace EchoMonitor
                 HangarBay = hangarBay,
                 Fleet = fleet,
                 Alerts = alerts,
+                Empire = empire,
                 Snapshot = snapshot
             };
+        }
+
+        private static EmpireStatus CollectEmpireStatus(GamePlayer gp, PlayerSnapshot snapshot)
+        {
+            var status = new EmpireStatus();
+            try
+            {
+                var depots = new HashSet<SpaceStation>();
+                foreach (var st in PlayerStation.GetAllOwned())
+                {
+                    if (st == null || st.materialStorage == null) continue;
+
+                    double used = st.materialStorage.spaceUsed;
+                    double cap = st.materialStorage.capacity;
+                    double fillPct = cap > 0 ? Math.Round((used / cap) * 100.0, 1) : 0.0;
+
+                    SpaceStation activeDepot = SupplyNetwork.GetActiveDepot(st.system?.sector)
+                        ?? SupplyNetwork.GetDepot(st.system?.sector);
+                    if (activeDepot != null && activeDepot.materialStorage != null)
+                    {
+                        depots.Add(activeDepot);
+                    }
+
+                    string largestId = string.Empty;
+                    string largestName = string.Empty;
+                    int largestCount = 0;
+                    double largestM3 = 0.0;
+
+                    foreach (var entry in st.materialStorage.items)
+                    {
+                        if (entry == null || entry.item == null || entry.count <= 0) continue;
+                        double m3 = entry.spaceRequired;
+                        if (m3 > largestM3 || (Math.Abs(m3 - largestM3) < 0.001 && entry.count > largestCount))
+                        {
+                            largestM3 = Math.Round(m3, 1);
+                            largestCount = entry.count;
+                            largestId = entry.item.identifier ?? string.Empty;
+                            largestName = TranslateIfNeeded(!string.IsNullOrEmpty(entry.item.displayName)
+                                ? entry.item.displayName
+                                : entry.item.identifier);
+                        }
+                    }
+
+                    status.Outposts.Add(new OutpostStorageInfo
+                    {
+                        StationGuid = st.guid ?? string.Empty,
+                        Name = TranslateIfNeeded(st.name),
+                        SectorName = TranslateIfNeeded(st.system?.sector?.name),
+                        SystemName = TranslateIfNeeded(st.system?.name),
+                        StationType = st.stationType.ToString(),
+                        Tier = st.tier,
+                        SpaceUsed = Math.Round(used, 1),
+                        Capacity = Math.Round(cap, 1),
+                        FillPct = fillPct,
+                        HasActiveDepot = activeDepot != null || gp.homeStation != null,
+                        LargestStackItemId = largestId,
+                        LargestStackItemName = largestName,
+                        LargestStackCount = largestCount,
+                        LargestStackM3 = largestM3
+                    });
+                }
+
+                status.Outposts.Sort((a, b) => b.FillPct.CompareTo(a.FillPct));
+
+                // Also discover any configured supply depots across all sectors
+                if (GalaxyMapData.current != null)
+                {
+                    foreach (var sector in GalaxyMapData.current.allSectors)
+                    {
+                        if (sector == null) continue;
+                        var dep = SupplyNetwork.GetActiveDepot(sector) ?? SupplyNetwork.GetDepot(sector);
+                        if (dep != null && dep.materialStorage != null)
+                        {
+                            depots.Add(dep);
+                        }
+                    }
+                }
+
+                // Fallback to homeStation if no sector supply depots are configured yet
+                if (depots.Count == 0 && gp.homeStation != null && gp.homeStation.materialStorage != null)
+                {
+                    depots.Add(gp.homeStation);
+                }
+
+                status.DepotCount = depots.Count;
+                double totalDepotUsed = 0.0;
+                double totalDepotCap = 0.0;
+
+                foreach (var depot in depots)
+                {
+                    if (depot?.materialStorage == null) continue;
+                    totalDepotUsed += depot.materialStorage.spaceUsed;
+                    totalDepotCap += depot.materialStorage.capacity;
+
+                    foreach (var entry in depot.materialStorage.items)
+                    {
+                        if (entry == null || entry.item == null || entry.count <= 0) continue;
+                        var cat = entry.item.itemCategory;
+                        string itemId = entry.item.identifier ?? string.Empty;
+                        string itemName = TranslateIfNeeded(!string.IsNullOrEmpty(entry.item.displayName)
+                            ? entry.item.displayName
+                            : itemId);
+
+                        if (cat == ItemCategory.Ore || cat == ItemCategory.Salvage || cat == ItemCategory.Crystal)
+                        {
+                            string key = $"{itemId}\u001f{itemName}\u001f{cat}";
+                            snapshot.DepotRawMaterials.TryGetValue(key, out int prev);
+                            snapshot.DepotRawMaterials[key] = prev + entry.count;
+                        }
+                        else if (cat == ItemCategory.RefinedProduct)
+                        {
+                            string key = $"{itemId}\u001f{itemName}";
+                            snapshot.DepotRefinedProducts.TryGetValue(key, out int prev);
+                            snapshot.DepotRefinedProducts[key] = prev + entry.count;
+                        }
+                    }
+                }
+
+                status.DepotSpaceUsed = Math.Round(totalDepotUsed, 1);
+                status.DepotCapacity = Math.Round(totalDepotCap, 1);
+                status.DepotFillPct = totalDepotCap > 0 ? Math.Round((totalDepotUsed / totalDepotCap) * 100.0, 1) : 0.0;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"CollectEmpireStatus error: {ex.Message}");
+            }
+
+            return status;
         }
 
         private static string TranslateIfNeeded(string value)

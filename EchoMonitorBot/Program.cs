@@ -233,6 +233,20 @@ public static class Program
                 };
                 await _discord.PostChannelMessageAsync(embed, components, ct);
             }
+            else if (string.Equals(type, "OutpostStorageFull", StringComparison.OrdinalIgnoreCase))
+            {
+                string guid = id.StartsWith("outpost_storage_full:", StringComparison.OrdinalIgnoreCase)
+                    ? id["outpost_storage_full:".Length..]
+                    : string.Empty;
+                var embed = MakeEmbed($"Outpost Storage Alert — {title}", detail, 0xF59E0B);
+                var components = new JsonArray
+                {
+                    DiscordGateway.MakeActionRow(
+                        DiscordGateway.MakeButton("Move Half Largest Stack → Depot", $"em:relieve_outpost:{guid}", 1),
+                        DiscordGateway.MakeButton("Dismiss", "em:dismiss", 2))
+                };
+                await _discord.PostChannelMessageAsync(embed, components, ct);
+            }
             else
             {
                 var embed = MakeEmbed($"EchoMonitor Alert — {title}", detail, 0xF59E0B);
@@ -454,6 +468,15 @@ public static class Program
                     await _discord.ReplyInteractionAsync(interaction, embed: BuildMissionsEmbed(state.Value));
                 break;
             }
+            case "empire":
+            {
+                var state = await GetFreshStateAsync();
+                if (!state.HasValue)
+                    await _discord.ReplyInteractionAsync(interaction, text: "EchoMonitor is currently unreachable.", ephemeral: true);
+                else
+                    await _discord.ReplyInteractionAsync(interaction, embed: BuildEmpireEmbed(state.Value));
+                break;
+            }
             case "recover":
             {
                 if (!_config.IsAllowed(interaction.UserId))
@@ -509,6 +532,19 @@ public static class Program
         if (!_config.IsAllowed(interaction.UserId))
         {
             await _discord.ReplyInteractionAsync(interaction, text: "You are not authorized to run EchoMonitor recovery actions.", ephemeral: true);
+            return;
+        }
+
+        if (interaction.CustomId.StartsWith("em:relieve_outpost:", StringComparison.OrdinalIgnoreCase))
+        {
+            string guid = interaction.CustomId["em:relieve_outpost:".Length..];
+            await _discord.DeferInteractionAsync(interaction, ephemeral: true);
+            string path = string.IsNullOrEmpty(guid)
+                ? "/api/action/relieve-outpost"
+                : $"/api/action/relieve-outpost?stationGuid={Uri.EscapeDataString(guid)}";
+            var relieveRes = await _api.PostActionAsync(path);
+            string rTag = relieveRes.Ok ? "OK" : "FAILED";
+            await _discord.EditDeferredReplyAsync(interaction, $"**[{rTag}] Relieve Outpost Storage**: {relieveRes.Message}");
             return;
         }
 
@@ -585,6 +621,11 @@ public static class Program
                 $"Commander: **Lv {GetInt(current, "commanderLevel")}** ({GetDbl(current, "commanderProgressPct"):0.0}%)\nEmpire: **Lv {GetInt(current, "empireLevel")}** ({GetDbl(current, "empireProgressPct"):0.0}%)",
                 true)
         };
+
+        if (TryGetObj(state, "empire", out var empire))
+        {
+            fields.Add(BuildEmpireSummaryField(empire));
+        }
 
         var embed = MakeEmbed(
             $"EchoMonitor Status — ECHO {echoLabel}",
@@ -756,11 +797,120 @@ public static class Program
             MakeField("Loot", $"Modules: **+{newModsCount}** | Crates: **+{GetInt(deltas, "lockedCratesTotal")}** | Ready BPs: **{readyBps}**", false)
         };
 
+        if (TryGetObj(state, "empire", out var empire))
+        {
+            fields.Add(BuildEmpireSummaryField(empire));
+        }
+
         return MakeEmbed(
             $"EchoMonitor Session Digest ({dur})",
             $"**ECHO:** {(GetBool(echo, "enabled") ? "ACTIVE" : "PAUSED")} (`{GetStr(echo, "state", "Unknown")}`) in **{GetStr(echo, "systemName", "Unknown")}**",
             0x3B82F6,
             fields);
+    }
+
+    private static JsonObject BuildEmpireSummaryField(JsonElement empire)
+    {
+        TryGetObj(empire, "activity", out var act);
+        long refined = GetLong(act, "refinedTotal");
+        long tradeProfit = GetLong(act, "tradeProfit");
+        long produced = GetLong(act, "outpostProducedTotal");
+
+        int rawTotal = GetInt(empire, "rawBacklogTotal");
+        int rawDelta = GetInt(empire, "rawBacklogDelta");
+        string rawTrend = rawDelta > 0 ? "GROWING" : (rawDelta < 0 ? "DRAINING" : "STEADY");
+
+        int refTotal = GetInt(empire, "refinedStockTotal");
+        int refDelta = GetInt(empire, "refinedStockDelta");
+
+        int fullOutposts = 0;
+        int totalOutposts = 0;
+        if (TryGetArr(empire, "outposts", out var outposts))
+        {
+            foreach (var op in outposts.EnumerateArray())
+            {
+                totalOutposts++;
+                if (GetDbl(op, "fillPct") >= 95.0) fullOutposts++;
+            }
+        }
+
+        string opWarn = fullOutposts > 0 ? $" | ⚠️ **{fullOutposts}/{totalOutposts} outposts ≥95%**" : "";
+        return MakeField(
+            "Empire & Refining",
+            $"Refined: **{FmtNum(refined)}** | Trade Profit: `{FmtSigned(tradeProfit)}` | Produced: **{FmtNum(produced)}**{opWarn}\n" +
+            $"Raw Backlog: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`, {rawTrend}) | Refined Stock: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`)",
+            false);
+    }
+
+    private static JsonObject BuildEmpireEmbed(JsonElement state)
+    {
+        if (!TryGetObj(state, "empire", out var empire))
+            return MakeEmbed("Empire & Refining", "No empire telemetry available.", 0x38BDF8);
+
+        TryGetObj(empire, "activity", out var act);
+        var fields = new JsonArray
+        {
+            MakeField(
+                "Session Activity",
+                $"Refined: **{FmtNum(GetLong(act, "refinedTotal"))}** ore units\n" +
+                $"Trade Profit: `{FmtSigned(GetLong(act, "tradeProfit"))}` ({GetInt(act, "tradeRuns")} runs) | Sales: **{FmtNum(GetLong(act, "stationSalesCredits"))}** cr\n" +
+                $"Outpost Produced: **{FmtNum(GetLong(act, "outpostProducedTotal"))}** | Crafted: **{FmtNum(GetLong(act, "craftedTotal"))}**",
+                false)
+        };
+
+        if (TryGetArr(empire, "outposts", out var outposts) && outposts.GetArrayLength() > 0)
+        {
+            var lines = new List<string>();
+            int n = 0;
+            foreach (var op in outposts.EnumerateArray())
+            {
+                if (n++ >= 8) break;
+                double pct = GetDbl(op, "fillPct");
+                string icon = pct >= 95.0 ? "🔴" : (pct >= 80.0 ? "🟠" : "🟢");
+                string stack = GetInt(op, "largestStackCount") > 0
+                    ? $" — top: {FmtNum(GetInt(op, "largestStackCount"))}x {GetStr(op, "largestStackItemName")}"
+                    : "";
+                lines.Add($"{icon} **{GetStr(op, "name")}** ({GetStr(op, "systemName")}): **{pct:0.0}%**{stack}");
+            }
+            fields.Add(MakeField($"Outpost Storage ({outposts.GetArrayLength()})", string.Join("\n", lines), false));
+        }
+
+        int rawTotal = GetInt(empire, "rawBacklogTotal");
+        int rawDelta = GetInt(empire, "rawBacklogDelta");
+        double rawRate = GetDbl(empire, "rawBacklogRatePerHour");
+        string rawTrend = rawDelta > 0 ? "GROWING" : (rawDelta < 0 ? "DRAINING" : "STEADY");
+        var rawLines = new List<string> { $"Total: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`, {rawRate:+0.0;-0.0;0.0}/hr — **{rawTrend}**)" };
+        if (TryGetArr(empire, "rawBacklogItems", out var rawItems))
+        {
+            int n = 0;
+            foreach (var it in rawItems.EnumerateArray())
+            {
+                if (n++ >= 5) break;
+                rawLines.Add($"• {GetStr(it, "name")}: **{FmtNum(GetInt(it, "current"))}** (`{FmtSigned(GetInt(it, "delta"))}`)");
+            }
+        }
+        fields.Add(MakeField("Depot Raw / Salvage Backlog", string.Join("\n", rawLines), true));
+
+        int refTotal = GetInt(empire, "refinedStockTotal");
+        int refDelta = GetInt(empire, "refinedStockDelta");
+        double refRate = GetDbl(empire, "refinedStockRatePerHour");
+        var refLines = new List<string> { $"Total: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`, {refRate:+0.0;-0.0;0.0}/hr)" };
+        if (TryGetArr(empire, "refinedStockItems", out var refItems))
+        {
+            int n = 0;
+            foreach (var it in refItems.EnumerateArray())
+            {
+                if (n++ >= 5) break;
+                refLines.Add($"• {GetStr(it, "name")}: **{FmtNum(GetInt(it, "current"))}** (`{FmtSigned(GetInt(it, "delta"))}`)");
+            }
+        }
+        fields.Add(MakeField("Depot Refined Products", string.Join("\n", refLines), true));
+
+        string depotDesc = GetInt(empire, "depotCount") > 0
+            ? $"Active Depots: **{GetInt(empire, "depotCount")}** — **{GetDbl(empire, "depotFillPct"):0.1}%** full ({FmtNum((long)GetDbl(empire, "depotSpaceUsed"))} / {FmtNum((long)GetDbl(empire, "depotCapacity"))} m³)"
+            : "No active supply depot configured.";
+
+        return MakeEmbed("Empire & Refining Overview", depotDesc, 0x38BDF8, fields);
     }
 
     private static JsonObject MakeEmbed(string title, string? description, int color, JsonArray? fields = null)

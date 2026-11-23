@@ -1153,6 +1153,9 @@
       <button class="tab-btn" data-tab="fleet" type="button" role="tab">
         Ship &amp; Fleet <span id="count-fleet" class="tab-count">0</span>
       </button>
+      <button class="tab-btn" data-tab="empire" type="button" role="tab">
+        Empire &amp; Refining <span id="count-empire" class="tab-count">0</span>
+      </button>
       <button class="tab-btn" data-tab="reputation" type="button" role="tab">
         Faction Rep <span id="count-reputation" class="tab-count">0</span>
       </button>
@@ -1245,6 +1248,33 @@
         <span id="hangar-summary-badge" class="mono neu"></span>
       </div>
       <div id="hangar-container"></div>
+    </div>
+
+    <!-- Tab: Empire & Refining -->
+    <div id="pane-empire" class="tab-pane">
+      <div class="section-heading">
+        <span>Empire Activity (This Session)</span>
+        <span id="empire-depot-badge" class="mono neu"></span>
+      </div>
+      <div id="empire-activity-container"></div>
+
+      <div class="section-heading">
+        <span>Outpost Storage</span>
+        <span id="empire-outposts-badge" class="mono neu"></span>
+      </div>
+      <div id="empire-outposts-container"></div>
+
+      <div class="section-heading">
+        <span>Depot Raw Materials &amp; Salvage Backlog</span>
+        <span id="empire-backlog-badge" class="mono neu"></span>
+      </div>
+      <div id="empire-backlog-container"></div>
+
+      <div class="section-heading">
+        <span>Depot Refined Products</span>
+        <span id="empire-refined-badge" class="mono neu"></span>
+      </div>
+      <div id="empire-refined-container"></div>
     </div>
 
     <!-- Tab 3: Faction Rep -->
@@ -1612,6 +1642,7 @@
     $("btn-toggle-echo").textContent = echo.enabled ? "Pause ECHO" : "Resume ECHO";
 
     renderAlerts(state.alerts);
+    renderEmpire(state.empire);
 
     $("echo-state-pill").textContent = "STATE: " + (echo.state || "Unknown").toUpperCase();
     $("echo-docked-pill").classList.toggle("hidden", !echo.docked);
@@ -1757,13 +1788,132 @@
     const warps = Number(alerts.emergencyWarps15m || 0);
     $("alert-warps-badge").textContent = warps > 0 ? "Emergency Warps (15m): " + fmtNum(warps) : "";
 
-    $("alert-list").innerHTML = items.map((a) =>
-      '<div class="alert-item">' +
+    $("alert-list").innerHTML = items.map((a) => {
+      let actionHtml = "";
+      if ((a.type || "") === "OutpostStorageFull" && (a.id || "").startsWith("outpost_storage_full:")) {
+        const guid = a.id.slice("outpost_storage_full:".length);
+        actionHtml = ' <button class="btn btn-sm" style="margin-left:8px" onclick="relieveOutpost(\'' + esc(guid) + '\')">Move ½ Stack → Depot</button>';
+      }
+      return '<div class="alert-item">' +
         '<div><strong>' + formatRichText(a.title || a.type || "Alert") + "</strong> — " +
-        '<span class="neu">' + formatRichText(a.detail || "") + "</span></div>" +
+        '<span class="neu">' + formatRichText(a.detail || "") + "</span>" + actionHtml + "</div>" +
         '<span class="mono neu">' + esc(fmtTime(a.triggeredAt)) + "</span>" +
-      "</div>"
-    ).join("");
+      "</div>";
+    }).join("");
+  }
+
+  async function relieveOutpost(stationGuid) {
+    try {
+      const res = await fetch("/api/action/relieve-outpost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stationGuid: stationGuid || "" })
+      });
+      const data = await res.json();
+      if (data && data.message) {
+        alert(data.message);
+      }
+    } catch (err) {
+      alert("Failed to relieve outpost: " + err);
+    }
+  }
+  window.relieveOutpost = relieveOutpost;
+
+  function renderEmpire(emp) {
+    const countEl = $("count-empire");
+    if (!emp) {
+      if (countEl) countEl.textContent = "0";
+      $("empire-activity-container").innerHTML = '<div class="empty-state">No empire data available.</div>';
+      $("empire-outposts-container").innerHTML = '<div class="empty-state">No player outposts found.</div>';
+      $("empire-backlog-container").innerHTML = '<div class="empty-state">No depot raw materials tracked.</div>';
+      $("empire-refined-container").innerHTML = '<div class="empty-state">No depot refined products tracked.</div>';
+      return;
+    }
+
+    const outposts = Array.isArray(emp.outposts) ? emp.outposts : [];
+    const fullCount = outposts.filter((o) => Number(o.fillPct || 0) >= 95).length;
+    if (countEl) {
+      countEl.textContent = fullCount > 0 ? fullCount + " FULL" : String(outposts.length);
+    }
+
+    $("empire-depot-badge").textContent = emp.depotCount > 0
+      ? "Depots: " + emp.depotCount + " (" + fmtNum(emp.depotSpaceUsed) + " / " + fmtNum(emp.depotCapacity) + " m³, " + Number(emp.depotFillPct || 0).toFixed(1) + "%)"
+      : "No active depot";
+
+    // 1. Session Activity KPIs
+    const act = emp.activity || {};
+    $("empire-activity-container").innerHTML =
+      '<div class="kpi-grid" style="margin-bottom:12px">' +
+        '<div class="kpi-card"><div class="kpi-label">Refined Output</div><div class="kpi-value mono">' + fmtNum(act.refinedTotal || 0) + '</div><div class="kpi-sub neu">ore units refined</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">Trade Profit</div><div class="kpi-value mono ' + deltaClass(act.tradeProfit || 0) + '">' + fmtSigned(act.tradeProfit || 0) + '</div><div class="kpi-sub neu">' + fmtNum(act.tradeRuns || 0) + ' runs | Sales: ' + fmtNum(act.stationSalesCredits || 0) + ' cr</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">Outpost Produced</div><div class="kpi-value mono">' + fmtNum(act.outpostProducedTotal || 0) + '</div><div class="kpi-sub neu">Crafted: ' + fmtNum(act.craftedTotal || 0) + '</div></div>' +
+      '</div>';
+
+    // 2. Outpost Storage
+    $("empire-outposts-badge").textContent = outposts.length + " outpost(s)" + (fullCount > 0 ? " — " + fullCount + " ≥ 95%" : "");
+    if (!outposts.length) {
+      $("empire-outposts-container").innerHTML = '<div class="empty-state">No player outposts owned.</div>';
+    } else {
+      const rows = outposts.map((o) => {
+        const pct = Number(o.fillPct || 0);
+        const isFull = pct >= 95;
+        const barColor = isFull ? "#ef4444" : (pct >= 80 ? "#f59e0b" : "#38bdf8");
+        const stackTxt = o.largestStackCount > 0
+          ? fmtNum(o.largestStackCount) + "x " + esc(o.largestStackItemName) + " (" + fmtNum(o.largestStackM3) + " m³)"
+          : "Empty";
+        const btnHtml = (o.largestStackCount >= 2 && o.hasActiveDepot)
+          ? '<button class="btn btn-sm" onclick="relieveOutpost(\'' + esc(o.stationGuid) + '\')">Move ½ → Depot</button>'
+          : '<span class="neu">--</span>';
+        return '<tr' + (isFull ? ' style="background:rgba(239,68,68,0.12)"' : '') + '>' +
+          '<td><strong>' + esc(o.name) + '</strong><div class="neu" style="font-size:11px">' + esc(o.sectorName) + ' / ' + esc(o.systemName) + ' (T' + (o.tier || 1) + ' ' + esc(o.stationType) + ')</div></td>' +
+          '<td class="mono" style="min-width:160px"><div style="display:flex;justify-content:space-between"><span>' + pct.toFixed(1) + '%</span><span class="neu">' + fmtNum(o.spaceUsed) + '/' + fmtNum(o.capacity) + ' m³</span></div>' +
+            '<div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;width:' + Math.min(100, pct).toFixed(1) + '%;background:' + barColor + '"></div></div></td>' +
+          '<td class="mono">' + stackTxt + '</td>' +
+          '<td style="text-align:right">' + btnHtml + '</td>' +
+        '</tr>';
+      }).join("");
+      $("empire-outposts-container").innerHTML =
+        '<table class="data-table"><thead><tr><th>Outpost</th><th>Storage</th><th>Largest Stack</th><th style="text-align:right">Relief</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    // 3. Depot Raw / Salvage Backlog
+    const rawDelta = Number(emp.rawBacklogDelta || 0);
+    const rawRate = Number(emp.rawBacklogRatePerHour || 0);
+    const rawTrend = rawDelta > 0 ? "GROWING" : (rawDelta < 0 ? "DRAINING" : "STEADY");
+    $("empire-backlog-badge").textContent =
+      "Total: " + fmtNum(emp.rawBacklogTotal || 0) + " (" + fmtSigned(rawDelta) + ", " + fmtSigned(rawRate) + "/hr — " + rawTrend + ")";
+    const rawItems = Array.isArray(emp.rawBacklogItems) ? emp.rawBacklogItems.slice(0, 20) : [];
+    if (!rawItems.length) {
+      $("empire-backlog-container").innerHTML = '<div class="empty-state">No raw materials or salvage in depot.</div>';
+    } else {
+      const rows = rawItems.map((it) =>
+        '<tr><td>' + esc(it.name) + ' <span class="neu" style="font-size:11px">(' + esc(it.category) + ')</span></td>' +
+        '<td class="mono" style="text-align:right">' + fmtNum(it.current) + '</td>' +
+        '<td class="mono ' + deltaClass(it.delta) + '" style="text-align:right">' + fmtSigned(it.delta) + '</td>' +
+        '<td class="mono neu" style="text-align:right">' + fmtSigned(it.ratePerHour) + '/hr</td></tr>'
+      ).join("");
+      $("empire-backlog-container").innerHTML =
+        '<table class="data-table"><thead><tr><th>Material</th><th style="text-align:right">Depot Stock</th><th style="text-align:right">Session Δ</th><th style="text-align:right">Rate</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    // 4. Depot Refined Products
+    const refDelta = Number(emp.refinedStockDelta || 0);
+    const refRate = Number(emp.refinedStockRatePerHour || 0);
+    $("empire-refined-badge").textContent =
+      "Total: " + fmtNum(emp.refinedStockTotal || 0) + " (" + fmtSigned(refDelta) + ", " + fmtSigned(refRate) + "/hr)";
+    const refItems = Array.isArray(emp.refinedStockItems) ? emp.refinedStockItems.slice(0, 20) : [];
+    if (!refItems.length) {
+      $("empire-refined-container").innerHTML = '<div class="empty-state">No refined products in depot.</div>';
+    } else {
+      const rows = refItems.map((it) =>
+        '<tr><td>' + esc(it.name) + '</td>' +
+        '<td class="mono" style="text-align:right">' + fmtNum(it.current) + '</td>' +
+        '<td class="mono ' + deltaClass(it.delta) + '" style="text-align:right">' + fmtSigned(it.delta) + '</td>' +
+        '<td class="mono neu" style="text-align:right">' + fmtSigned(it.ratePerHour) + '/hr</td></tr>'
+      ).join("");
+      $("empire-refined-container").innerHTML =
+        '<table class="data-table"><thead><tr><th>Refined Product</th><th style="text-align:right">Depot Stock</th><th style="text-align:right">Session Δ</th><th style="text-align:right">Rate</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
   }
 
   function renderRank(key, val, delta) {

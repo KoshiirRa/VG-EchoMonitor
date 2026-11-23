@@ -128,6 +128,10 @@ namespace EchoMonitor
         public Dictionary<string, int> OfficerLevels { get; set; } = new Dictionary<string, int>();
         // Key: "name\u001frarity\u001filvl" -> count
         public Dictionary<string, int> LockedCrates { get; set; } = new Dictionary<string, int>();
+        // Key: "itemId\u001fname\u001fcategory" -> count across all active depots
+        public Dictionary<string, int> DepotRawMaterials { get; set; } = new Dictionary<string, int>();
+        // Key: "itemId\u001fname" -> count across all active depots
+        public Dictionary<string, int> DepotRefinedProducts { get; set; } = new Dictionary<string, int>();
     }
 
     public sealed class HistoryEntry
@@ -314,6 +318,68 @@ namespace EchoMonitor
         public string Reason { get; set; } = string.Empty;
     }
 
+    public sealed class OutpostStorageInfo
+    {
+        public string StationGuid { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string SectorName { get; set; } = string.Empty;
+        public string SystemName { get; set; } = string.Empty;
+        public string StationType { get; set; } = string.Empty;
+        public int Tier { get; set; }
+        public double SpaceUsed { get; set; }
+        public double Capacity { get; set; }
+        public double FillPct { get; set; }
+        public bool HasActiveDepot { get; set; }
+        public string LargestStackItemId { get; set; } = string.Empty;
+        public string LargestStackItemName { get; set; } = string.Empty;
+        public int LargestStackCount { get; set; }
+        public double LargestStackM3 { get; set; }
+    }
+
+    public sealed class DepotMaterialEntry
+    {
+        public string ItemId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public int Baseline { get; set; }
+        public int Current { get; set; }
+        public int Delta { get; set; }
+        public double RatePerHour { get; set; }
+    }
+
+    public sealed class EmpireActivityDelta
+    {
+        public long RefinedTotal { get; set; }
+        public Dictionary<string, int> RefinedByItem { get; set; } = new Dictionary<string, int>();
+        public int TradeRuns { get; set; }
+        public long TradeEarned { get; set; }
+        public long TradeSpent { get; set; }
+        public long TradeProfit { get; set; }
+        public long StationSalesCredits { get; set; }
+        public long OutpostProducedTotal { get; set; }
+        public Dictionary<string, int> OutpostProducedByItem { get; set; } = new Dictionary<string, int>();
+        public long CraftedTotal { get; set; }
+        public Dictionary<string, int> CraftedByItem { get; set; } = new Dictionary<string, int>();
+    }
+
+    public sealed class EmpireStatus
+    {
+        public List<OutpostStorageInfo> Outposts { get; set; } = new List<OutpostStorageInfo>();
+        public int DepotCount { get; set; }
+        public double DepotSpaceUsed { get; set; }
+        public double DepotCapacity { get; set; }
+        public double DepotFillPct { get; set; }
+        public int RawBacklogTotal { get; set; }
+        public int RawBacklogDelta { get; set; }
+        public double RawBacklogRatePerHour { get; set; }
+        public List<DepotMaterialEntry> RawBacklogItems { get; set; } = new List<DepotMaterialEntry>();
+        public int RefinedStockTotal { get; set; }
+        public int RefinedStockDelta { get; set; }
+        public double RefinedStockRatePerHour { get; set; }
+        public List<DepotMaterialEntry> RefinedStockItems { get; set; } = new List<DepotMaterialEntry>();
+        public EmpireActivityDelta Activity { get; set; } = new EmpireActivityDelta();
+    }
+
     public sealed class LiveTelemetry
     {
         public bool InGame { get; set; }
@@ -323,6 +389,7 @@ namespace EchoMonitor
         public HangarBayStatus HangarBay { get; set; }
         public List<FleetShipInfo> Fleet { get; set; }
         public AlertsStatus Alerts { get; set; }
+        public EmpireStatus Empire { get; set; }
         public PlayerSnapshot Snapshot { get; set; }
     }
 }

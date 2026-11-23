@@ -21,7 +21,7 @@ namespace EchoMonitor
         private SessionManager _sessionManager;
         private HttpServer _server;
 
-        private string _latestStateJson = "{\"inGame\":false,\"timestamp\":\"\",\"saveId\":\"\",\"sessionStartedAt\":\"\",\"sessionDurationHours\":0,\"echo\":null,\"crew\":null,\"droneBay\":null,\"hangarBay\":null,\"fleet\":null,\"alerts\":null,\"missionLog\":[],\"current\":null,\"baseline\":null,\"deltas\":null}";
+        private string _latestStateJson = "{\"inGame\":false,\"timestamp\":\"\",\"saveId\":\"\",\"sessionStartedAt\":\"\",\"sessionDurationHours\":0,\"echo\":null,\"crew\":null,\"droneBay\":null,\"hangarBay\":null,\"fleet\":null,\"alerts\":null,\"empire\":null,\"missionLog\":[],\"current\":null,\"baseline\":null,\"deltas\":null}";
         private readonly object _stateLock = new object();
         private float _nextSampleTime;
 
@@ -43,6 +43,11 @@ namespace EchoMonitor
 
             EchoPatches.OnPlayerEmergencyWarp = (poi, mission) => _stuckDetector.RecordEmergencyWarp(poi, mission);
             EchoPatches.OnMissionEvent = entry => _sessionManager.RecordMissionEvent(entry);
+            EchoPatches.OnEmpireRefined = (item, amt) => _sessionManager.RecordEmpireRefined(item, amt);
+            EchoPatches.OnEmpireProduced = (item, amt) => _sessionManager.RecordEmpireProduced(item, amt);
+            EchoPatches.OnEmpireCrafted = (item, amt) => _sessionManager.RecordEmpireCrafted(item, amt);
+            EchoPatches.OnEmpireTradeRun = (earned, spent, profit) => _sessionManager.RecordEmpireTradeRun(earned, spent, profit);
+            EchoPatches.OnEmpireSale = credits => _sessionManager.RecordEmpireSale(credits);
 
             _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
             EchoPatches.Apply(_harmony);
@@ -58,7 +63,8 @@ namespace EchoMonitor
                 HandleToggleEcho,
                 HandleAbandonMission,
                 HandleWarpDefend,
-                HandleDismissAlerts);
+                HandleDismissAlerts,
+                HandleRelieveOutpost);
 
             try
             {
@@ -66,7 +72,8 @@ namespace EchoMonitor
                 if (_config.OpenBrowserOnStart.Value)
                 {
                     string url = $"http://127.0.0.1:{_config.Port.Value}/";
-                    TryOpenBrowser(url);
+                    try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+                    catch (Exception ex) { Log.LogWarning($"Could not open browser: {ex.Message}"); }
                 }
 
                 if (_config.AutoLaunchBot.Value)
@@ -182,26 +189,10 @@ namespace EchoMonitor
             return "{\"ok\":true}";
         }
 
-        private void TryOpenBrowser(string url)
+        private string HandleRelieveOutpost(string stationGuid)
         {
-            try
-            {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                return;
-            }
-            catch (Exception ex)
-            {
-                if (Environment.OSVersion.Platform != PlatformID.Win32NT)
-                {
-                    try
-                    {
-                        Process.Start(new ProcessStartInfo("xdg-open", url) { UseShellExecute = false });
-                        return;
-                    }
-                    catch { /* fall through to warning */ }
-                }
-                Log.LogWarning($"Could not open browser: {ex.Message}");
-            }
+            var res = _dispatcher.Invoke(() => RecoveryController.RelieveOutpostStorage(stationGuid, _stuckDetector), timeoutMs: 5000);
+            return JsonUtil.SerializeRecoveryResponse(res);
         }
 
         private void TryLaunchCompanionBot()
@@ -221,16 +212,13 @@ namespace EchoMonitor
                     string pluginDir = Path.GetDirectoryName(Info.Location);
                     if (!string.IsNullOrEmpty(pluginDir))
                     {
-                        bool isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
-                        string primary = Path.Combine(pluginDir, isWindows ? "EchoMonitorBot.exe" : "EchoMonitorBot");
-                        string fallback = Path.Combine(pluginDir, isWindows ? "EchoMonitorBot" : "EchoMonitorBot.exe");
-                        exePath = File.Exists(primary) ? primary : (File.Exists(fallback) ? fallback : primary);
+                        exePath = Path.Combine(pluginDir, "EchoMonitorBot.exe");
                     }
                 }
 
                 if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath))
                 {
-                    Log.LogWarning($"AutoLaunchBot is enabled, but EchoMonitorBot was not found at: {exePath}");
+                    Log.LogWarning($"AutoLaunchBot is enabled, but EchoMonitorBot.exe was not found at: {exePath}");
                     return;
                 }
 

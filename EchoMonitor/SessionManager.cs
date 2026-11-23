@@ -35,6 +35,7 @@ namespace EchoMonitor
         private PlayerSnapshot _baseline;
         private readonly List<HistoryEntry> _history = new List<HistoryEntry>();
         private readonly List<MissionLogEntry> _missionLog = new List<MissionLogEntry>();
+        private EmpireActivityDelta _empireActivity = new EmpireActivityDelta();
         private DateTime _lastHistoryWriteUtc = DateTime.MinValue;
 
         public SessionManager(string configRootPath)
@@ -69,7 +70,7 @@ namespace EchoMonitor
         {
             if (telemetry == null || !telemetry.InGame || telemetry.Snapshot == null)
             {
-                return JsonUtil.SerializeStateResponse(false, string.Empty, string.Empty, 0.0, null, null, null, null, null, null, null, null, null, null);
+                return JsonUtil.SerializeStateResponse(false, string.Empty, string.Empty, 0.0, null, null, null, null, null, null, null, null, null, null, null);
             }
 
             lock (_lock)
@@ -77,6 +78,7 @@ namespace EchoMonitor
                 EnsureSessionLoaded(telemetry.Snapshot);
 
                 var deltas = ComputeDeltas(_baseline, telemetry.Snapshot, out double durationHours);
+                PopulateEmpireMetricsLocked(telemetry.Empire, _baseline, telemetry.Snapshot, durationHours);
 
                 // Populate officer level deltas against session baseline
                 if (telemetry.Crew?.Officers != null)
@@ -114,11 +116,174 @@ namespace EchoMonitor
                     telemetry.HangarBay,
                     telemetry.Fleet,
                     telemetry.Alerts,
+                    telemetry.Empire,
                     recentMissions,
                     telemetry.Snapshot,
                     _baseline,
                     deltas);
             }
+        }
+
+        public void RecordEmpireRefined(string itemName, int amount)
+        {
+            if (string.IsNullOrEmpty(itemName) || amount <= 0) return;
+            lock (_lock)
+            {
+                _empireActivity.RefinedTotal += amount;
+                _empireActivity.RefinedByItem.TryGetValue(itemName, out int prev);
+                _empireActivity.RefinedByItem[itemName] = prev + amount;
+            }
+        }
+
+        public void RecordEmpireProduced(string itemName, int amount)
+        {
+            if (string.IsNullOrEmpty(itemName) || amount <= 0) return;
+            lock (_lock)
+            {
+                _empireActivity.OutpostProducedTotal += amount;
+                _empireActivity.OutpostProducedByItem.TryGetValue(itemName, out int prev);
+                _empireActivity.OutpostProducedByItem[itemName] = prev + amount;
+            }
+        }
+
+        public void RecordEmpireCrafted(string itemName, int amount)
+        {
+            if (string.IsNullOrEmpty(itemName) || amount <= 0) return;
+            lock (_lock)
+            {
+                _empireActivity.CraftedTotal += amount;
+                _empireActivity.CraftedByItem.TryGetValue(itemName, out int prev);
+                _empireActivity.CraftedByItem[itemName] = prev + amount;
+            }
+        }
+
+        public void RecordEmpireTradeRun(long earned, long spent, long profit)
+        {
+            lock (_lock)
+            {
+                _empireActivity.TradeRuns++;
+                _empireActivity.TradeEarned += earned;
+                _empireActivity.TradeSpent += spent;
+                _empireActivity.TradeProfit += profit;
+            }
+        }
+
+        public void RecordEmpireSale(long credits)
+        {
+            if (credits <= 0) return;
+            lock (_lock)
+            {
+                _empireActivity.StationSalesCredits += credits;
+            }
+        }
+
+        private void PopulateEmpireMetricsLocked(EmpireStatus empire, PlayerSnapshot baseline, PlayerSnapshot current, double durationHours)
+        {
+            if (empire == null || baseline == null || current == null) return;
+
+            double safeHours = durationHours > 0.001 ? durationHours : 0.0;
+
+            // Raw materials & salvage backlog across active depots
+            var rawKeys = new HashSet<string>(StringComparer.Ordinal);
+            if (baseline.DepotRawMaterials != null) foreach (var k in baseline.DepotRawMaterials.Keys) rawKeys.Add(k);
+            if (current.DepotRawMaterials != null) foreach (var k in current.DepotRawMaterials.Keys) rawKeys.Add(k);
+
+            int rawTotal = 0;
+            int rawBaseTotal = 0;
+            var rawItems = new List<DepotMaterialEntry>();
+
+            foreach (var key in rawKeys)
+            {
+                int baseVal = baseline.DepotRawMaterials != null && baseline.DepotRawMaterials.TryGetValue(key, out int bv) ? bv : 0;
+                int curVal = current.DepotRawMaterials != null && current.DepotRawMaterials.TryGetValue(key, out int cv) ? cv : 0;
+                int delta = curVal - baseVal;
+                rawTotal += curVal;
+                rawBaseTotal += baseVal;
+
+                var parts = key.Split(KeySep);
+                string itemId = parts.Length > 0 ? parts[0] : key;
+                string name = parts.Length > 1 ? parts[1] : itemId;
+                string cat = parts.Length > 2 ? parts[2] : "Ore";
+
+                rawItems.Add(new DepotMaterialEntry
+                {
+                    ItemId = itemId,
+                    Name = name,
+                    Category = cat,
+                    Baseline = baseVal,
+                    Current = curVal,
+                    Delta = delta,
+                    RatePerHour = safeHours > 0 ? Math.Round(delta / safeHours, 1) : 0.0
+                });
+            }
+
+            rawItems.Sort((a, b) =>
+            {
+                int cmp = b.Current.CompareTo(a.Current);
+                if (cmp != 0) return cmp;
+                return Math.Abs(b.Delta).CompareTo(Math.Abs(a.Delta));
+            });
+
+            empire.RawBacklogTotal = rawTotal;
+            empire.RawBacklogDelta = rawTotal - rawBaseTotal;
+            empire.RawBacklogRatePerHour = safeHours > 0 ? Math.Round(empire.RawBacklogDelta / safeHours, 1) : 0.0;
+            empire.RawBacklogItems = rawItems;
+
+            // Refined products stored at active depots
+            var refKeys = new HashSet<string>(StringComparer.Ordinal);
+            if (baseline.DepotRefinedProducts != null) foreach (var k in baseline.DepotRefinedProducts.Keys) refKeys.Add(k);
+            if (current.DepotRefinedProducts != null) foreach (var k in current.DepotRefinedProducts.Keys) refKeys.Add(k);
+
+            int refTotal = 0;
+            int refBaseTotal = 0;
+            var refItems = new List<DepotMaterialEntry>();
+
+            foreach (var key in refKeys)
+            {
+                int baseVal = baseline.DepotRefinedProducts != null && baseline.DepotRefinedProducts.TryGetValue(key, out int bv) ? bv : 0;
+                int curVal = current.DepotRefinedProducts != null && current.DepotRefinedProducts.TryGetValue(key, out int cv) ? cv : 0;
+                int delta = curVal - baseVal;
+                refTotal += curVal;
+                refBaseTotal += baseVal;
+
+                var parts = key.Split(KeySep);
+                string itemId = parts.Length > 0 ? parts[0] : key;
+                string name = parts.Length > 1 ? parts[1] : itemId;
+
+                refItems.Add(new DepotMaterialEntry
+                {
+                    ItemId = itemId,
+                    Name = name,
+                    Category = "RefinedProduct",
+                    Baseline = baseVal,
+                    Current = curVal,
+                    Delta = delta,
+                    RatePerHour = safeHours > 0 ? Math.Round(delta / safeHours, 1) : 0.0
+                });
+            }
+
+            refItems.Sort((a, b) => b.Current.CompareTo(a.Current));
+
+            empire.RefinedStockTotal = refTotal;
+            empire.RefinedStockDelta = refTotal - refBaseTotal;
+            empire.RefinedStockRatePerHour = safeHours > 0 ? Math.Round(empire.RefinedStockDelta / safeHours, 1) : 0.0;
+            empire.RefinedStockItems = refItems;
+
+            // Snapshot of session empire activity
+            empire.Activity = new EmpireActivityDelta
+            {
+                RefinedTotal = _empireActivity.RefinedTotal,
+                RefinedByItem = new Dictionary<string, int>(_empireActivity.RefinedByItem),
+                TradeRuns = _empireActivity.TradeRuns,
+                TradeEarned = _empireActivity.TradeEarned,
+                TradeSpent = _empireActivity.TradeSpent,
+                TradeProfit = _empireActivity.TradeProfit,
+                StationSalesCredits = _empireActivity.StationSalesCredits,
+                OutpostProducedTotal = _empireActivity.OutpostProducedTotal,
+                OutpostProducedByItem = new Dictionary<string, int>(_empireActivity.OutpostProducedByItem),
+                CraftedTotal = _empireActivity.CraftedTotal,
+                CraftedByItem = new Dictionary<string, int>(_empireActivity.CraftedByItem)
+            };
         }
 
         public string GetHistoryJson()
@@ -184,6 +349,7 @@ namespace EchoMonitor
                 _baseline = current;
                 _history.Clear();
                 _missionLog.Clear();
+                _empireActivity = new EmpireActivityDelta();
 
                 string saveDir = GetSaveDir(_activeSaveId);
                 Directory.CreateDirectory(saveDir);
