@@ -51,6 +51,14 @@ Broader empire activity tracking (materials refined, trade station profits, outp
 - **EchoMonitorBot**:
   - Display the refining backlog trend (growing vs. draining) in `/status` and periodic session digests.
 
+#### 5. Depot Refined Products Storage Tracking
+- **Goal**: Track current depot stockpiles (and session deltas) of refined products.
+- **EchoMonitor**:
+  - Read refined product quantities stored at the empire depot and baseline them at session start.
+  - Expose per-item refined product counts and session deltas (`+/-`) in telemetry and the web UI.
+- **EchoMonitorBot**:
+  - Surface refined product stockpiles and net gains in `/status`, periodic session digests, and/or an empire inventory command.
+
 ---
 
 ### Milestone 5 (Planned) ⏳ — Freeform ECHO Shopping Instructions
