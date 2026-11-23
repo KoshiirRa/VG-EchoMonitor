@@ -35,6 +35,59 @@ Monitor your overnight ECHO autopilot sessions from desktop or mobile, get alert
 4. Open `http://127.0.0.1:8778/` in your browser.
 5. *(Optional)* See [`EchoMonitorBot/README.md`](EchoMonitorBot/README.md) to set up the Discord companion bot.
 
+## Discord Bot Setup & Configuration
+
+You can optionally run `EchoMonitorBot.exe` alongside `EchoMonitor.dll` to receive real-time Discord alerts (Stuck ECHO, Empire Raids/Sieges, Crash vs. Clean Exit, Rare Loot, Ready Ship Blueprints) and trigger recovery actions remotely via interactive buttons and slash commands.
+
+### 1. Create a Discord Application & Bot Token
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and click **New Application** (e.g. `EchoMonitor`).
+2. Go to the **Bot** tab, click **Reset Token** (or **Add Bot**), and copy the generated bot token. *(Keep this secret — never commit it.)*
+3. No privileged gateway intents are required (the bot uses slash commands, interactive buttons, and channel embeds only).
+
+### 2. Invite the Bot to Your Server
+1. Go to **OAuth2 → URL Generator**.
+2. Under **Scopes**, check:
+   - `bot`
+   - `applications.commands`
+3. Under **Bot Permissions**, check:
+   - `View Channels`
+   - `Send Messages`
+   - `Embed Links`
+4. Open the generated URL in your browser and authorize the bot on your server.
+5. If you plan to use a **private channel**, open the channel's **Edit Channel → Permissions** and explicitly add the bot role/member with **View Channel**, **Send Messages**, and **Embed Links**.
+
+### 3. Copy Your Channel ID & User ID
+1. In Discord, open **User Settings → Advanced** and enable **Developer Mode**.
+2. Right-click your target alerts channel → **Copy Channel ID** (`discordChannelId`).
+3. Right-click your own Discord username → **Copy User ID** (`allowedUserIds`) so only you (and any other listed user IDs) can click recovery buttons or run control commands.
+
+### 4. Create `echomonitor_bot.json`
+Copy `EchoMonitorBot.exe` into `BepInEx/plugins/EchoMonitor/` (next to `EchoMonitor.dll`), then create `echomonitor_bot.json` in the same folder:
+
+```json
+{
+  "discordBotToken": "YOUR_DISCORD_BOT_TOKEN",
+  "discordChannelId": "123456789012345678",
+  "allowedUserIds": ["987654321098765432"],
+  "echoMonitorUrl": "http://127.0.0.1:8778",
+  "echoMonitorToken": "",
+  "offlineAlertSeconds": 30,
+  "digestIntervalMinutes": 60,
+  "minLootAlertRarity": "Exotic"
+}
+```
+
+### 5. Enable Auto-Launch (or Run Manually)
+- **Auto-launch with the game**: Open `BepInEx/config/EchoMonitor.cfg` and set:
+  ```ini
+  [DiscordBot]
+  AutoLaunchBot = true
+  ```
+  When Vanguard Galaxy starts, `EchoMonitor.dll` will automatically launch `EchoMonitorBot.exe` in the background (if not already running).
+- **Manual / Remote**: You can also run `EchoMonitorBot.exe` manually (or on another machine/server pointed at your `echoMonitorUrl`).
+
+See [`EchoMonitorBot/README.md`](EchoMonitorBot/README.md) for all environment variable overrides, slash commands, and configuration options.
+
 ## Building from Source
 
 ```bash
