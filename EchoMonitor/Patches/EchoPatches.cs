@@ -11,7 +11,6 @@ namespace EchoMonitor.Patches
     {
         public static string LastIdleStatus { get; private set; } = string.Empty;
         public static string LastIdleRawKey { get; private set; } = string.Empty;
-        public static string LoadedSaveName { get; private set; } = string.Empty;
         public static Action<string, string> OnPlayerEmergencyWarp { get; set; }
         public static Action<MissionLogEntry> OnMissionEvent { get; set; }
 
@@ -28,11 +27,6 @@ namespace EchoMonitor.Patches
                 harmony,
                 AccessTools.Method("Behaviour.Gameplay.IdleManager:UpdateActivity", new[] { typeof(string), typeof(object[]) }),
                 postfix: new HarmonyMethod(typeof(EchoPatches), nameof(UpdateActivityPostfix)));
-
-            TryPatch(
-                harmony,
-                AccessTools.Method("Source.Util.SaveGameFile:LoadSaveGame"),
-                postfix: new HarmonyMethod(typeof(EchoPatches), nameof(LoadSaveGamePostfix)));
 
             TryPatch(
                 harmony,
@@ -86,24 +80,6 @@ namespace EchoMonitor.Patches
             {
                 LastIdleRawKey = text.Trim();
             }
-        }
-
-        private static void LoadSaveGamePostfix(object __instance)
-        {
-            if (__instance == null) return;
-            try
-            {
-                var prop = AccessTools.Property(__instance.GetType(), "Name");
-                if (prop != null)
-                {
-                    var name = prop.GetValue(__instance) as string;
-                    if (!string.IsNullOrWhiteSpace(name))
-                    {
-                        LoadedSaveName = name.Trim();
-                    }
-                }
-            }
-            catch { }
         }
 
         private static void TryEmergencyJumpPostfix(bool __result, Behaviour.Unit.SpaceShip __instance)

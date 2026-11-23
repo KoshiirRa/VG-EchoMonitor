@@ -42,6 +42,7 @@ public static class Program
 
     private static readonly HashSet<(string Id, string TriggeredAt)> SeenAlerts = new();
     private static bool _seededLoot;
+    private static string _lastSaveId = string.Empty;
     private static readonly Dictionary<(string Name, string Rarity, int ItemLevel, string StatsSig), int> SeenModuleCounts = new();
     private static readonly HashSet<string> SeenReadyBps = new(StringComparer.OrdinalIgnoreCase);
 
@@ -245,11 +246,15 @@ public static class Program
         if (!TryGetObj(state, "deltas", out var deltas))
             return;
 
+        string saveId = GetStr(state, "saveId");
         bool hasMods = TryGetArr(deltas, "newModules", out var newMods);
         bool hasBps = TryGetArr(deltas, "newShipBlueprints", out var shipBps);
 
-        if (!_seededLoot)
+        bool saveChanged = !string.IsNullOrEmpty(saveId) && !string.Equals(saveId, _lastSaveId, StringComparison.Ordinal);
+        if (!_seededLoot || saveChanged)
         {
+            SeenModuleCounts.Clear();
+            SeenReadyBps.Clear();
             if (hasMods)
             {
                 foreach (var mod in newMods.EnumerateArray())
@@ -269,12 +274,14 @@ public static class Program
                     }
                 }
             }
+            _lastSaveId = saveId;
             _seededLoot = true;
             return;
         }
 
         if (hasMods)
         {
+            var newDrops = new List<(string Name, string Rarity, int ItemLevel, int Diff, List<string> Lines)>();
             foreach (var mod in newMods.EnumerateArray())
             {
                 string name = GetStr(mod, "name", "Unknown Module");
@@ -319,10 +326,33 @@ public static class Program
                                     lines.Add($"• **{aName}**");
                             }
                         }
-                        int color = RarityColors.GetValueOrDefault(rarity, 0xA855F7);
-                        var embed = MakeEmbed($"Rare Loot Drop — {rarity}", Truncate(string.Join("\n", lines), 4000), color);
-                        await _discord.PostChannelMessageAsync(embed, ct: ct);
+                        newDrops.Add((name, rarity, ilvl, diff, lines));
                     }
+                }
+            }
+
+            if (newDrops.Count > 5)
+            {
+                var summaryLines = new List<string>
+                {
+                    $"**{newDrops.Count} qualifying modules** appeared in a single update (collapsed to prevent spam):"
+                };
+                foreach (var d in newDrops.Take(10))
+                {
+                    summaryLines.Add($"- **[{d.Rarity}] {d.Name}** (iLvl {d.ItemLevel}) x{d.Diff}");
+                }
+                if (newDrops.Count > 10)
+                    summaryLines.Add($"*...and {newDrops.Count - 10} more*");
+                var embed = MakeEmbed("Rare Loot Batch", Truncate(string.Join("\n", summaryLines), 4000), 0xA855F7);
+                await _discord.PostChannelMessageAsync(embed, ct: ct);
+            }
+            else
+            {
+                foreach (var d in newDrops)
+                {
+                    int color = RarityColors.GetValueOrDefault(d.Rarity, 0xA855F7);
+                    var embed = MakeEmbed($"Rare Loot Drop — {d.Rarity}", Truncate(string.Join("\n", d.Lines), 4000), color);
+                    await _discord.PostChannelMessageAsync(embed, ct: ct);
                 }
             }
         }

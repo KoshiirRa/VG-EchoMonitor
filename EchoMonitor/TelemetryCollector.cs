@@ -724,21 +724,6 @@ namespace EchoMonitor
 
         private static string ResolveSaveId(GamePlayer gp)
         {
-            if (!string.IsNullOrWhiteSpace(EchoPatches.LoadedSaveName))
-            {
-                return EchoPatches.LoadedSaveName;
-            }
-
-            try
-            {
-                var latest = SaveGame.GetLatestSave();
-                if (latest != null && !string.IsNullOrWhiteSpace(latest.Name))
-                {
-                    return latest.Name;
-                }
-            }
-            catch { }
-
             string cmdr = gp.commander?.lastName ?? "Commander";
             string starter = gp.starterSpaceshipName ?? "Ship";
             return $"{cmdr}_{starter}";

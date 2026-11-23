@@ -250,7 +250,16 @@ namespace EchoMonitor
             {
                 try
                 {
-                    _baseline = JsonUtil.DeserializePlayerSnapshot(File.ReadAllText(baselinePath, Encoding.UTF8));
+                    var loaded = JsonUtil.DeserializePlayerSnapshot(File.ReadAllText(baselinePath, Encoding.UTF8));
+                    if (loaded != null && HasLegacyModuleKeys(loaded))
+                    {
+                        Plugin.Log?.LogWarning($"Detected legacy module key format in baseline.json for {saveId}; resetting baseline.");
+                        _baseline = null;
+                    }
+                    else
+                    {
+                        _baseline = loaded;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -635,6 +644,18 @@ namespace EchoMonitor
             }
 
             return deltas;
+        }
+
+        private static bool HasLegacyModuleKeys(PlayerSnapshot snap)
+        {
+            if (snap?.Modules == null || snap.Modules.Count == 0) return false;
+            foreach (var key in snap.Modules.Keys)
+            {
+                if (string.IsNullOrEmpty(key)) continue;
+                var parts = key.Split(KeySep);
+                if (parts.Length < 5) return true;
+            }
+            return false;
         }
 
         private string GetSaveDir(string saveId) => Path.Combine(_rootDir, SanitizeSaveId(saveId));
