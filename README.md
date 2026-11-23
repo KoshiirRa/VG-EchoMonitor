@@ -47,6 +47,10 @@ cd ../EchoMonitorBot
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
+## AI / LLM Disclosure
+
+`EchoMonitor`, `EchoMonitorBot`, and the accompanying modding skills under `.agents/skills/` were developed with AI assistance (**Google Antigravity / Gemini**) and verified directly against Vanguard Galaxy's `Assembly-CSharp.dll` and live in-game testing.
+
 ## Disclaimer
 
 This is an unofficial community mod for **Vanguard Galaxy** and is not affiliated with or endorsed by **Bat Roost Games**.
