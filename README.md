@@ -103,12 +103,44 @@ dotnet publish -c Release -r linux-x64 --self-contained true -p:PublishSingleFil
 
 ## Linux / Steam Deck (Proton)
 
-- **BepInEx under Proton:** Add the standard Steam launch option for Vanguard Galaxy:
-  ```bash
-  WINEDLLOVERRIDES="winhttp=n,b" %command%
-  ```
-- **Dashboard & Networking:** Proton shares the host network namespace, so `http://127.0.0.1:8778/` is directly accessible from your native Linux browser.
-- **Companion Bot:** Run the native `linux-x64` `EchoMonitorBot` binary on the Linux host (with `AutoLaunchBot = false` in EchoMonitor config). See [EchoMonitorBot/README.md](EchoMonitorBot/README.md) for XDG config paths and the `systemd --user` service template.
+Vanguard Galaxy does not have a native Linux branch and runs via **Steam Proton**. `EchoMonitor.dll` runs inside Proton via Windows BepInEx 5, while `EchoMonitorBot` runs natively on Linux (`linux-x64`).
+
+### 1. Install BepInEx 5 & `EchoMonitor.dll` (Proton)
+1. Download the **Windows x64** release of [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) (`BepInEx_win_x64_5.4.x.zip`) and extract it into your Vanguard Galaxy game folder (typically `~/.local/share/Steam/steamapps/common/Vanguard Galaxy`).
+2. Make sure `winhttp.dll` has executable permissions (some Proton/Wine builds require `+x` on overridden native DLLs):
+   ```bash
+   chmod +x ~/.local/share/Steam/steamapps/common/Vanguard\ Galaxy/winhttp.dll
+   ```
+3. Copy `EchoMonitor.dll` into `BepInEx/plugins/EchoMonitor/EchoMonitor.dll`.
+4. In Steam → **Vanguard Galaxy → Properties → General → Launch Options**, set:
+   ```bash
+   WINEDLLOVERRIDES="winhttp=n,b" %command%
+   ```
+5. Launch the game once to generate `BepInEx/config/EchoMonitor.cfg`.
+
+### 2. Install Native `EchoMonitorBot` (`linux-x64`)
+Proton shares the host network namespace, so a native Linux `EchoMonitorBot` connects directly to `http://127.0.0.1:8778`:
+1. Download and extract `EchoMonitorBot-linux-x64.tar.gz` from the [Releases](../../releases) page.
+2. Install the binary and config:
+   ```bash
+   mkdir -p ~/.local/bin ~/.config/echomonitor-bot ~/.config/systemd/user
+   cp EchoMonitorBot ~/.local/bin/EchoMonitorBot
+   chmod +x ~/.local/bin/EchoMonitorBot
+   cp echomonitor_bot.example.json ~/.config/echomonitor-bot/echomonitor_bot.json
+   chmod 600 ~/.config/echomonitor-bot/echomonitor_bot.json
+   # Edit ~/.config/echomonitor-bot/echomonitor_bot.json with your Discord token & channel ID
+   ```
+3. *(Optional)* Run it persistently via `systemd --user`:
+   ```bash
+   cp echomonitor-bot.service.example ~/.config/systemd/user/echomonitor-bot.service
+   systemctl --user daemon-reload
+   systemctl --user enable --now echomonitor-bot.service
+   ```
+4. Keep `AutoLaunchBot = false` (default) in `BepInEx/config/EchoMonitor.cfg` so Proton does not try to spawn a Windows `.exe` inside Wine.
+
+### Linux / Proton Quirks & Troubleshooting
+- **Game exits immediately on launch (no `BepInEx/LogOutput.log` created):** Check `~/.local/share/Steam/logs/console-linux.txt`. A typo or missing closing quote in Steam Launch Options causes `/bin/sh` to fail before Proton even starts. Also verify `chmod +x winhttp.dll`.
+- **Reverse proxy / LAN access returns connection refused:** Even after opening port `8778` in your firewall (`ufw allow 8778`), `EchoMonitor` defaults to binding `127.0.0.1` only. Set `AllowRemote = true` in `BepInEx/config/EchoMonitor.cfg` and restart the game so it binds to `+:8778` (all interfaces).
 
 ## Roadmap
 
