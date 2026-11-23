@@ -100,6 +100,14 @@ cd ../EchoMonitorBot
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
+## Roadmap
+
+- **Milestone 1 (Complete)** ✅ Core BepInEx 5 mod + embedded HTTP/SSE server + responsive Vanguard Galaxy HUD (Shield/Armor/Hull, Crew/Officers with level deltas, Active Fleet + per-ship Drone/Hangar Bays, Loot with exact rarity colors + substats/aspects + Locked Crates, Ship/Module Blueprints, Faction Rep, Session Timeline with monotonic level-up XP & % to next level).
+- **Milestone 2 (Complete)** ✅ Stuck ECHO Detection (Destroyed/Hostile Station dock loop + same-mission/POI Emergency Warp loop) + Web UI Recovery Controls (Warp to Safe Station, Abandon Active Mission, Reset/Toggle ECHO) + Running Mission Log.
+- **Milestone 3 (Complete)** ✅ Empire Raid & Siege Detection + Warp to Defend + Standalone .NET 8 Discord Companion Bot (`EchoMonitorBot.exe`) with interactive alert buttons, slash commands, crash vs. clean-exit detection, and `AutoLaunchBot`.
+- **Milestone 4 (Planned)** ⏳ Empire Activity Tracking (materials refined, trade station profits, outpost production broken out alongside ECHO telemetry).
+- **Milestone 5 (Planned)** ⏳ Freeform ECHO Shopping Instructions (LLM-parsed shopping tours via Discord or Web UI with route preview, credit cap, and confirmation before execution).
+
 ## AI / LLM Disclosure
 
 `EchoMonitor`, `EchoMonitorBot`, and the accompanying modding skills under `.agents/skills/` were developed with AI assistance (**Google Antigravity / Gemini**) and verified directly against Vanguard Galaxy's `Assembly-CSharp.dll` and live in-game testing.
