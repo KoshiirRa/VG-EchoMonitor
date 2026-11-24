@@ -920,7 +920,7 @@ public static class Program
         fields.Add(MakeField("Depot Refined Products", string.Join("\n", refLines), true));
 
         string depotDesc = GetInt(empire, "depotCount") > 0
-            ? $"Active Depots: **{GetInt(empire, "depotCount")}** — **{GetDbl(empire, "depotFillPct"):0.1}%** full ({FmtNum((long)GetDbl(empire, "depotSpaceUsed"))} / {FmtNum((long)GetDbl(empire, "depotCapacity"))} m³)"
+            ? $"Active Depots: **{GetInt(empire, "depotCount")}** — **{GetDbl(empire, "depotFillPct"):0.0}%** full ({FmtNum((long)GetDbl(empire, "depotSpaceUsed"))} / {FmtNum((long)GetDbl(empire, "depotCapacity"))} m³)"
             : "No active supply depot configured.";
 
         return MakeEmbed("Empire & Refining Overview", depotDesc, 0x38BDF8, fields);
