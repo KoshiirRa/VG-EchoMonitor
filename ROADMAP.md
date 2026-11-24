@@ -15,15 +15,30 @@ Planned features and milestone history spanning the in-game **EchoMonitor** BepI
 
 ## Planned Milestones
 
-### Milestone 5 (Planned) ⏳ — Freeform ECHO Shopping Instructions
+### Milestone 5 (Planned — ECHO Enhanced) ⏳ — Freeform ECHO Shopping Instructions
 - LLM-parsed shopping tours via Discord or Web UI with route preview, credit cap, and confirmation before execution.
 
 ---
 
-### Milestone 6 (Planned — Possible Separate Mod: "Enhanced ECHO") ⏳ — Automated Drone Loadout Swapping
+### Milestone 6 (Planned — ECHO Enhanced) ⏳ — Automated Drone Loadout Swapping
 - Automated in-field drone loadout swapping for drone fleets — allow ECHO to automatically swap drones from a combat setup (laser/missile + target painter + shield repair) to a salvage setup (salvage laser + salvage harpoon) when wrecks are generated.
 
 ---
 
-### Milestone 7 (Planned) ⏳ — Auto-Favorite Modules
+### Milestone 7 (Planned — ECHO Enhanced) ⏳ — Auto-Favorite Modules
 - Automatically flag modules as favorites when they meet user-defined conditions (e.g., rarity, tier/level, substats/aspects, or module type).
+
+---
+
+### Milestone 8 (Planned) ⏳ — Outpost Job Status
+- Show the current job status of outposts (active jobs, progress, and idle/stalled states) in the Web UI and Discord companion.
+
+---
+
+### Milestone 9 (Planned — ECHO Enhanced) ⏳ — Auto-Sell Modules
+- Automatically sell modules that meet user-defined criteria (e.g., rarity, tier/level, substats/aspects, or module type).
+
+---
+
+### Milestone 10 (Planned — ECHO Enhanced) ⏳ — Auto-Extract Aspects
+- Automatically extract aspects from modules that meet user-defined criteria (e.g., rarity, tier/level, target aspect/substats, or module type).
