@@ -25,6 +25,7 @@ namespace EchoMonitor
         private string _badStationKey = string.Empty;
         private DateTime _badStationFirstSeenUtc = DateTime.MinValue;
         private string _lastEmergencyLoopKey = string.Empty;
+        private DateTime _emergencyLoopFirstSeenUtc = DateTime.MinValue;
 
         public void RecordEmergencyWarp(string poiName, string missionName)
         {
@@ -44,6 +45,7 @@ namespace EchoMonitor
             {
                 _dismissedKeys.Add("destroyed_hostile_station");
                 _dismissedKeys.Add("emergency_warp_loop");
+                _emergencyLoopFirstSeenUtc = DateTime.MinValue;
                 foreach (var bid in _battleFirstSeenUtc.Keys)
                 {
                     _dismissedKeys.Add("empire_raid_" + bid);
@@ -66,6 +68,7 @@ namespace EchoMonitor
                 _badStationKey = string.Empty;
                 _badStationFirstSeenUtc = DateTime.MinValue;
                 _lastEmergencyLoopKey = string.Empty;
+                _emergencyLoopFirstSeenUtc = DateTime.MinValue;
             }
         }
 
@@ -193,6 +196,11 @@ namespace EchoMonitor
 
                         if (!_dismissedKeys.Contains("emergency_warp_loop"))
                         {
+                            if (_emergencyLoopFirstSeenUtc == DateTime.MinValue)
+                            {
+                                _emergencyLoopFirstSeenUtc = bestTimeUtc;
+                            }
+
                             activeItems.Add(new AlertItem
                             {
                                 Id = "emergency_warp_loop",
@@ -200,10 +208,20 @@ namespace EchoMonitor
                                 Severity = "critical",
                                 Title = "ECHO Emergency Warp Loop Detected",
                                 Detail = $"{bestCount} emergency warps in the last 15 min on {bestLabel}.",
-                                TriggeredAt = bestTimeUtc.ToString("o")
+                                TriggeredAt = _emergencyLoopFirstSeenUtc.ToString("o")
                             });
                         }
                     }
+                    else
+                    {
+                        _emergencyLoopFirstSeenUtc = DateTime.MinValue;
+                        _lastEmergencyLoopKey = string.Empty;
+                    }
+                }
+                else
+                {
+                    _emergencyLoopFirstSeenUtc = DateTime.MinValue;
+                    _lastEmergencyLoopKey = string.Empty;
                 }
             }
 

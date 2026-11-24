@@ -41,7 +41,8 @@ namespace EchoMonitor.Patches
             TryPatch(
                 harmony,
                 AccessTools.Method("Behaviour.Unit.SpaceShip:TryEmergencyJump"),
-                postfix: new HarmonyMethod(typeof(EchoPatches), nameof(TryEmergencyJumpPostfix)));
+                postfix: new HarmonyMethod(typeof(EchoPatches), nameof(TryEmergencyJumpPostfix)),
+                prefix: new HarmonyMethod(typeof(EchoPatches), nameof(TryEmergencyJumpPrefix)));
 
             TryPatch(
                 harmony,
@@ -84,7 +85,7 @@ namespace EchoMonitor.Patches
                 postfix: new HarmonyMethod(typeof(EchoPatches), nameof(EmpireOnCraftedPostfix)));
         }
 
-        private static void TryPatch(Harmony harmony, MethodBase target, HarmonyMethod postfix)
+        private static void TryPatch(Harmony harmony, MethodBase target, HarmonyMethod postfix, HarmonyMethod prefix = null)
         {
             if (target == null)
             {
@@ -93,7 +94,7 @@ namespace EchoMonitor.Patches
             }
             try
             {
-                harmony.Patch(target, postfix: postfix);
+                harmony.Patch(target, prefix: prefix, postfix: postfix);
             }
             catch (Exception ex)
             {
@@ -117,18 +118,24 @@ namespace EchoMonitor.Patches
             }
         }
 
-        private static void TryEmergencyJumpPostfix(bool __result, Behaviour.Unit.SpaceShip __instance)
+        private static void TryEmergencyJumpPrefix(out bool __state)
         {
-            if (!__result || __instance == null) return;
+            __state = Source.Player.GamePlayer.current?.emergencyJump ?? false;
+        }
+
+        private static void TryEmergencyJumpPostfix(bool __result, Behaviour.Unit.SpaceShip __instance, bool __state)
+        {
+            if (!__result || __instance == null || __state) return;
             try
             {
                 if (!__instance.IsPlayer(true)) return;
                 var gp = Source.Player.GamePlayer.current;
-                string poiName = gp?.currentPointOfInterest?.name ?? string.Empty;
-                string missionName = gp?.infiniteMission?.name
-                    ?? gp?.currentBounty?.name
-                    ?? gp?.currentPatrol?.name
-                    ?? gp?.currentIndustry?.name
+                if (gp == null || !gp.emergencyJump) return;
+                string poiName = gp.currentPointOfInterest?.name ?? string.Empty;
+                string missionName = gp.infiniteMission?.name
+                    ?? gp.currentBounty?.name
+                    ?? gp.currentPatrol?.name
+                    ?? gp.currentIndustry?.name
                     ?? string.Empty;
                 OnPlayerEmergencyWarp?.Invoke(poiName, missionName);
             }
