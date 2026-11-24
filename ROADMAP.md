@@ -26,7 +26,10 @@ Planned features and milestone history spanning the in-game **EchoMonitor** BepI
 ---
 
 ### Milestone 7 (Planned — ECHO Enhanced) ⏳ — Auto-Favorite Modules
-- Automatically flag modules as favorites when they meet user-defined conditions (e.g., rarity, tier/level, substats/aspects, or module type).
+- Automatically flag modules as favorites when they meet user-defined conditions (e.g., rarity, tier/iLvl, substats/aspects, or module type/name) so they are protected from accidental selling or aspect extraction (Milestones 9 & 10).
+- **Criteria Examples:**
+  - *Wishlist / Fleet Goal:* `item matches ["Microcell Swarm", "Hailfire", "Missile Launcher"] AND rarity >= Exotic AND iLvl >= 90` (e.g., *Exotic Microcell Swarm Mk.XX, iLvl 93, Punch Through*).
+  - *Workshop Reroll-Aware Substats ("N of M"):* Match items with at least `N` desired substats (e.g., `>= 2 of [Turret Rotation Speed, Critical Damage, Energy Damage, Reload Speed]`), so 2-of-3 rolls with one dead substat (like Torpedo Power) that are one Workshop reroll away from a god-roll still get auto-favorited.
 
 ---
 
