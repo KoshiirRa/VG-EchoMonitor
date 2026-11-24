@@ -12,6 +12,7 @@ public sealed class BotConfig
     public int OfflineAlertSeconds { get; init; } = 30;
     public int DigestIntervalMinutes { get; init; } = 60;
     public string MinLootAlertRarity { get; init; } = "Exotic";
+    public bool ExitOnCleanShutdown { get; init; } = true;
 
     private static readonly Dictionary<string, int> RarityOrder = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -65,7 +66,8 @@ public sealed class BotConfig
             "ECHOMONITOR_TOKEN",
             "OFFLINE_ALERT_SECONDS",
             "DIGEST_INTERVAL_MINUTES",
-            "MIN_LOOT_ALERT_RARITY"
+            "MIN_LOOT_ALERT_RARITY",
+            "EXIT_ON_CLEAN_SHUTDOWN"
         };
 
         foreach (string key in keys)
@@ -95,6 +97,9 @@ public sealed class BotConfig
 
         int offlineSecs = int.TryParse(Get("OFFLINE_ALERT_SECONDS", "30"), out int o) ? Math.Max(5, o) : 30;
         int digestMins = int.TryParse(Get("DIGEST_INTERVAL_MINUTES", "60"), out int d) ? Math.Max(0, d) : 60;
+        bool defaultExitOnCleanShutdown = OperatingSystem.IsWindows();
+        string exitRaw = Get("EXIT_ON_CLEAN_SHUTDOWN", defaultExitOnCleanShutdown ? "true" : "false");
+        bool exitOnCleanShutdown = string.Equals(exitRaw, "true", StringComparison.OrdinalIgnoreCase);
 
         return new BotConfig
         {
@@ -105,7 +110,8 @@ public sealed class BotConfig
             EchoMonitorToken = Get("ECHOMONITOR_TOKEN"),
             OfflineAlertSeconds = offlineSecs,
             DigestIntervalMinutes = digestMins,
-            MinLootAlertRarity = Get("MIN_LOOT_ALERT_RARITY", "Exotic")
+            MinLootAlertRarity = Get("MIN_LOOT_ALERT_RARITY", "Exotic"),
+            ExitOnCleanShutdown = exitOnCleanShutdown
         };
     }
 

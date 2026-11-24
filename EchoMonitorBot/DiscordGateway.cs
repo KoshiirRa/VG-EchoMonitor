@@ -161,6 +161,16 @@ public sealed class DiscordGateway : IDisposable
             {
                 try { await heartbeatTask; } catch { }
             }
+
+            if (ws.State == WebSocketState.Open || ws.State == WebSocketState.CloseReceived)
+            {
+                try
+                {
+                    using var closeCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Shutting down", closeCts.Token);
+                }
+                catch { }
+            }
         }
     }
 
