@@ -5,6 +5,7 @@ using Behaviour.Item;
 using Behaviour.Item.Usable;
 using Behaviour.Managers;
 using Behaviour.UI.Spacestation;
+using Behaviour.Unit;
 using Behaviour.Util;
 using EchoMonitor.Patches;
 using HarmonyLib;
@@ -15,6 +16,7 @@ using Source.Galaxy.Trade;
 using Source.Item;
 using Source.MissionSystem;
 using Source.Player;
+using Source.SpaceShip;
 using Source.Util;
 
 namespace EchoMonitor
@@ -676,6 +678,21 @@ namespace EchoMonitor
                         {
                             snap.ShipBlueprintPieces[sbs.shipId] =
                                 snap.ShipBlueprintPieces.TryGetValue(sbs.shipId, out int prev) ? prev + slot.count : slot.count;
+                            if (!snap.ShipSizes.ContainsKey(sbs.shipId) || !snap.ShipDisplayNames.ContainsKey(sbs.shipId))
+                            {
+                                var spaceShip = SpaceShip.Get(sbs.shipId);
+                                if (spaceShip != null)
+                                {
+                                    if (!snap.ShipSizes.ContainsKey(sbs.shipId))
+                                    {
+                                        snap.ShipSizes[sbs.shipId] = spaceShip.shipRoleType.GetShipType().ToString();
+                                    }
+                                    if (!snap.ShipDisplayNames.ContainsKey(sbs.shipId) && !string.IsNullOrEmpty(spaceShip.originalName))
+                                    {
+                                        snap.ShipDisplayNames[sbs.shipId] = TranslateIfNeeded(spaceShip.originalName);
+                                    }
+                                }
+                            }
                             if (!snap.ShipDisplayNames.ContainsKey(sbs.shipId) && !string.IsNullOrEmpty(item.displayName))
                             {
                                 snap.ShipDisplayNames[sbs.shipId] = TranslateIfNeeded(item.displayName);

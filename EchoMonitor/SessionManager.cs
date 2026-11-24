@@ -673,9 +673,9 @@ namespace EchoMonitor
                         string shipId = kv.Key;
                         string disp = c.ShipDisplayNames != null && c.ShipDisplayNames.TryGetValue(shipId, out var dn) && !string.IsNullOrEmpty(dn) ? dn : shipId;
                         string size = c.ShipSizes != null && c.ShipSizes.TryGetValue(shipId, out var sz) ? sz : string.Empty;
-                        int req = !string.IsNullOrEmpty(size) && RequiredPiecesBySize.TryGetValue(size, out int r) ? r : DefaultRequiredPieces;
+                        int req = !string.IsNullOrEmpty(size) && RequiredPiecesBySize.TryGetValue(size, out int r) ? r : 0;
                         bool alreadyUnlocked = currUnlocked.Contains(shipId);
-                        bool canComplete = kv.Value >= req && !alreadyUnlocked;
+                        bool canComplete = req > 0 && kv.Value >= req && !alreadyUnlocked;
                         deltas.NewShipBlueprints.Add(new ShipBlueprintDeltaEntry
                         {
                             ShipId = shipId,
