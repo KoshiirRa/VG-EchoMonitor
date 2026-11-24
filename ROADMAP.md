@@ -22,3 +22,8 @@ Planned features and milestone history spanning the in-game **EchoMonitor** BepI
 
 ### Milestone 6 (Planned — Possible Separate Mod: "Enhanced ECHO") ⏳ — Automated Drone Loadout Swapping
 - Automated in-field drone loadout swapping for drone fleets — allow ECHO to automatically swap drones from a combat setup (laser/missile + target painter + shield repair) to a salvage setup (salvage laser + salvage harpoon) when wrecks are generated.
+
+---
+
+### Milestone 7 (Planned) ⏳ — Auto-Favorite Modules
+- Automatically flag modules as favorites when they meet user-defined conditions (e.g., rarity, tier/level, substats/aspects, or module type).
