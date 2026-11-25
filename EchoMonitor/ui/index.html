@@ -2863,6 +2863,8 @@
     $("hangar-container").innerHTML = '<div class="fighter-grid">' + cards + "</div>";
   }
 
+  const expandedMissionBoards = new Set();
+
   function renderMissionLog(log) {
     const items = Array.isArray(log) ? log : [];
     $("count-missions").textContent = items.length;
@@ -2879,7 +2881,7 @@
       return;
     }
 
-    const rows = items.map((m) => {
+    const rows = items.map((m, idx) => {
       const ev = (m.event || "Unknown").trim();
       const evLow = ev.toLowerCase();
       let evCls = "pill-state";
@@ -2897,21 +2899,61 @@
         locHtml = '<span class="neu">' + esc(sysSec) + "</span>";
       }
 
-      return "<tr>" +
+      const board = Array.isArray(m.boardMissions) ? m.boardMissions : [];
+      const rowKey = String(m.timestamp || idx) + "|" + String(m.missionName || "");
+      const isOpen = board.length > 0 && expandedMissionBoards.has(rowKey);
+      const boardBtn = board.length > 0
+        ? ' <button type="button" class="btn-secondary mission-board-toggle" data-key="' + esc(rowKey) + '" style="padding:1px 6px;font-size:11px;margin-left:6px">' + (isOpen ? "▼" : "▶") + " Board (" + board.length + ")</button>"
+        : "";
+
+      let html = "<tr>" +
         '<td class="mono">' + esc(fmtTime(m.timestamp)) + "</td>" +
         '<td><span class="pill ' + evCls + '">' + esc(ev) + "</span></td>" +
         "<td><strong>" + formatRichText(m.missionName || "Unknown Mission") + "</strong>" +
-          (m.isStory ? ' <span class="badge-unlocked">STORY</span>' : "") + "</td>" +
+          (m.isStory ? ' <span class="badge-unlocked">STORY</span>' : "") + boardBtn + "</td>" +
         '<td class="mono">' + esc(m.gameplayType || "--") + "</td>" +
         "<td>" + locHtml + "</td>" +
         '<td class="neu">' + (m.reason ? formatRichText(m.reason) : "--") + "</td>" +
       "</tr>";
+
+      if (board.length > 0) {
+        const boardItemsHtml = board.map((bm) => {
+          const tags = Array.isArray(bm.tags) ? bm.tags : [];
+          const tagPills = tags.map((t) => '<span class="pill pill-state" style="font-size:10px;padding:1px 6px;margin-left:4px">' + esc(t) + "</span>").join("");
+          return '<div style="padding:3px 0;display:flex;flex-wrap:wrap;align-items:center;gap:2px">' +
+            '<span>• ' + formatRichText(bm.name || "Unknown Mission") + "</span>" + tagPills + "</div>";
+        }).join("");
+        html += '<tr class="mission-board-row" data-key="' + esc(rowKey) + '" style="' + (isOpen ? "" : "display:none;") + 'background:rgba(255,255,255,0.02)">' +
+          '<td colspan="6" style="padding:8px 14px 10px 28px">' +
+            '<div class="neu" style="font-size:11px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em">Station Mission Board (' + board.length + ")</div>" +
+            boardItemsHtml +
+          "</td></tr>";
+      }
+
+      return html;
     }).join("");
 
     $("missions-container").innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
       "<th>Time</th><th>Event</th><th>Mission</th><th>Type</th><th>Location</th><th>Reason</th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>";
+
+    $("missions-container").querySelectorAll(".mission-board-toggle").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-key");
+        if (!key) return;
+        const detailRow = $("missions-container").querySelector('tr.mission-board-row[data-key="' + CSS.escape(key) + '"]');
+        if (expandedMissionBoards.has(key)) {
+          expandedMissionBoards.delete(key);
+          if (detailRow) detailRow.style.display = "none";
+          btn.textContent = btn.textContent.replace("▼", "▶");
+        } else {
+          expandedMissionBoards.add(key);
+          if (detailRow) detailRow.style.display = "";
+          btn.textContent = btn.textContent.replace("▶", "▼");
+        }
+      });
+    });
   }
 
   function renderReputation(repList) {

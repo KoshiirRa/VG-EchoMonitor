@@ -308,6 +308,12 @@ namespace EchoMonitor
         public List<AlertItem> Items { get; set; } = new List<AlertItem>();
     }
 
+    public sealed class MissionBoardEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public List<string> Tags { get; set; } = new List<string>();
+    }
+
     public sealed class MissionLogEntry
     {
         public string Timestamp { get; set; } = string.Empty;
@@ -319,6 +325,7 @@ namespace EchoMonitor
         public string StationName { get; set; } = string.Empty;
         public string SystemName { get; set; } = string.Empty;
         public string SectorName { get; set; } = string.Empty;
+        public List<MissionBoardEntry> BoardMissions { get; set; } = new List<MissionBoardEntry>();
     }
 
     public sealed class OutpostStorageInfo

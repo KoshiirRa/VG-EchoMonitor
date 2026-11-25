@@ -909,6 +909,19 @@ namespace EchoMonitor
             sb.Append(",\"stationName\":"); AppendString(sb, e.StationName);
             sb.Append(",\"systemName\":"); AppendString(sb, e.SystemName);
             sb.Append(",\"sectorName\":"); AppendString(sb, e.SectorName);
+            if (e.BoardMissions != null && e.BoardMissions.Count > 0)
+            {
+                sb.Append(",\"boardMissions\":[");
+                for (int i = 0; i < e.BoardMissions.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    var bm = e.BoardMissions[i];
+                    sb.Append("{\"name\":"); AppendString(sb, bm.Name);
+                    sb.Append(",\"tags\":"); AppendStringList(sb, bm.Tags);
+                    sb.Append('}');
+                }
+                sb.Append(']');
+            }
             sb.Append('}');
         }
 
@@ -916,7 +929,7 @@ namespace EchoMonitor
         {
             var root = Parse(json) as Dictionary<string, object>;
             if (root == null) return null;
-            return new MissionLogEntry
+            var entry = new MissionLogEntry
             {
                 Timestamp = GetString(root, "timestamp", string.Empty),
                 Event = GetString(root, "event", string.Empty),
@@ -928,6 +941,29 @@ namespace EchoMonitor
                 SystemName = GetString(root, "systemName", string.Empty),
                 SectorName = GetString(root, "sectorName", string.Empty)
             };
+            if (root.TryGetValue("boardMissions", out var bmObj) && bmObj is List<object> bmList)
+            {
+                foreach (var item in bmList)
+                {
+                    if (item is Dictionary<string, object> d)
+                    {
+                        var bm = new MissionBoardEntry
+                        {
+                            Name = GetString(d, "name", string.Empty)
+                        };
+                        if (d.TryGetValue("tags", out var tObj) && tObj is List<object> tList)
+                        {
+                            foreach (var t in tList)
+                            {
+                                if (t is string ts && !string.IsNullOrEmpty(ts))
+                                    bm.Tags.Add(ts);
+                            }
+                        }
+                        entry.BoardMissions.Add(bm);
+                    }
+                }
+            }
+            return entry;
         }
 
         #region Minimal JSON Parser
