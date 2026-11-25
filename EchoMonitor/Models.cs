@@ -191,6 +191,7 @@ namespace EchoMonitor
         public string Name { get; set; } = string.Empty;
         public string Rarity { get; set; } = string.Empty;
         public int ItemLevel { get; set; }
+        public string Size { get; set; } = string.Empty;
         public string EquipmentType { get; set; } = string.Empty;
         public int Gained { get; set; }
         public List<string> Substats { get; set; } = new List<string>();
@@ -344,6 +345,24 @@ namespace EchoMonitor
         public string LargestStackItemName { get; set; } = string.Empty;
         public int LargestStackCount { get; set; }
         public double LargestStackM3 { get; set; }
+        public string State { get; set; } = string.Empty;
+        public bool HasStalledJob { get; set; }
+        public int ActiveJobCount { get; set; }
+        public List<OutpostJobInfo> Jobs { get; set; } = new List<OutpostJobInfo>();
+    }
+
+    public sealed class OutpostJobInfo
+    {
+        public string JobType { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public double ProgressPct { get; set; }
+        public int InitialAmount { get; set; }
+        public int RemainingAmount { get; set; }
+        public bool Repeat { get; set; }
+        public bool Stalled { get; set; }
+        public bool Paused { get; set; }
+        public bool AwaitingSupplies { get; set; }
+        public double TimeRemainingSec { get; set; } = -1.0;
     }
 
     public sealed class DepotMaterialEntry
