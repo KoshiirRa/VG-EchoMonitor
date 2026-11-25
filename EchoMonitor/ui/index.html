@@ -1014,6 +1014,113 @@
     background: var(--bg-panel);
     border: 1px solid var(--border);
   }
+  .zk-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .zk-stat {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-top: 2px solid #c0392b;
+    padding: 10px 12px;
+  }
+  .zk-stat.waves { border-top-color: #d4a017; }
+  .zk-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+  .zk-stat-val { font-size: 20px; font-weight: 700; margin-top: 2px; font-family: var(--mono); color: var(--text-bright); }
+  .zk-stat-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .zk-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 900px) { .zk-grid { grid-template-columns: 1fr; } }
+  .zk-panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .zk-panel-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .zk-class-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .zk-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    color: var(--text);
+  }
+  .zk-pill:hover, .zk-pill.active { border-color: #e74c3c; background: rgba(231,76,60,0.14); color: #fff; }
+  .zk-pill-cnt { font-family: var(--mono); font-weight: 700; color: #e74c3c; }
+  .zk-wave-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 11px;
+  }
+  .zk-wave-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    background: rgba(212,160,23,0.18);
+    border: 1px solid rgba(212,160,23,0.45);
+    color: #f1c40f;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 10px;
+  }
+  .zk-rank-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-family: var(--mono);
+    border: 1px solid var(--border);
+    margin-left: 4px;
+  }
+  .zk-rank-Elite, .zk-rank-Champion, .zk-rank-Boss { color: #f39c12; border-color: rgba(243,156,18,0.5); background: rgba(243,156,18,0.12); }
+  .zk-rank-Veteran { color: #3498db; border-color: rgba(52,152,219,0.5); background: rgba(52,152,219,0.12); }
+  .zk-kill-row { cursor: pointer; }
+  .zk-kill-row:hover { background: rgba(231,76,60,0.08); }
+  .zk-killmail {
+    background: #0d1218;
+    border: 1px solid #c0392b;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .zk-killmail-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .zk-killmail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    font-size: 12px;
+  }
+  @media (max-width: 700px) { .zk-killmail-grid { grid-template-columns: 1fr; } }
+  .zk-km-kv { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .zk-km-k { color: var(--text-dim); }
+  .zk-km-v { color: var(--text-bright); font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -1236,6 +1343,9 @@
       <button class="tab-btn" data-tab="missions" type="button" role="tab">
         Mission Log <span id="count-missions" class="tab-count">0</span>
       </button>
+      <button class="tab-btn" data-tab="kills" type="button" role="tab">
+        Kill Log <span id="count-kills" class="tab-count">0</span>
+      </button>
       <button class="tab-btn" data-tab="timeline" type="button" role="tab">
         Session Timeline <span id="count-timeline" class="tab-count">0</span>
       </button>
@@ -1417,6 +1527,61 @@
         <button id="btn-refresh-history" class="btn" type="button">Refresh History</button>
       </div>
       <div id="history-container"></div>
+    </div>
+
+    <!-- Tab: Kill Log (zKillboard style) -->
+    <div id="pane-kills" class="tab-pane">
+      <div class="section-heading">
+        <span>Combat Killboard &amp; Wave Tracker</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="kills-filter-badge" class="mono neu"></span>
+          <button id="btn-clear-kills" class="btn" type="button">Clear Kill Log</button>
+        </div>
+      </div>
+
+      <div class="zk-stats-bar">
+        <div class="zk-stat">
+          <div class="zk-stat-label">Total Kills</div>
+          <div id="zk-total-kills" class="zk-stat-val">0</div>
+          <div id="zk-mission-kills" class="zk-stat-sub">Current POI/Mission: 0</div>
+        </div>
+        <div class="zk-stat waves">
+          <div class="zk-stat-label">Reinforcement Waves</div>
+          <div id="zk-total-waves" class="zk-stat-val">0</div>
+          <div id="zk-mission-waves" class="zk-stat-sub">Current POI/Mission: 0</div>
+        </div>
+        <div class="zk-stat">
+          <div class="zk-stat-label">Top Ship Class</div>
+          <div id="zk-top-class" class="zk-stat-val" style="font-size:15px">--</div>
+          <div id="zk-top-class-sub" class="zk-stat-sub">0 kills</div>
+        </div>
+        <div class="zk-stat">
+          <div class="zk-stat-label">Top Final Blow</div>
+          <div id="zk-top-killer" class="zk-stat-val" style="font-size:15px">--</div>
+          <div id="zk-top-killer-sub" class="zk-stat-sub">0 kills</div>
+        </div>
+      </div>
+
+      <div class="zk-grid">
+        <div class="zk-panel">
+          <div class="zk-panel-title">
+            <span>Kills by Ship Class (click to filter)</span>
+            <span id="zk-class-total" class="mono">0 classes</span>
+          </div>
+          <div id="zk-class-pills" class="zk-class-pills"></div>
+        </div>
+        <div class="zk-panel">
+          <div class="zk-panel-title">
+            <span>Reinforcement Wave Log</span>
+            <span id="zk-wave-context" class="mono"></span>
+          </div>
+          <div id="zk-wave-list"></div>
+        </div>
+      </div>
+
+      <div id="zk-killmail-detail" class="zk-killmail hidden"></div>
+
+      <div id="kills-table-container"></div>
     </div>
 
     <!-- Tab 8: ECHO Enhanced -->
@@ -2891,10 +3056,15 @@
 
       const sysSec = [m.systemName, m.sectorName].filter(Boolean).join(" · ");
       let locHtml = '<span class="neu">--</span>';
-      if (m.stationName && sysSec) {
-        locHtml = "<strong>" + esc(m.stationName) + '</strong><div class="neu" style="font-size:11px">' + esc(sysSec) + "</div>";
-      } else if (m.stationName) {
-        locHtml = "<strong>" + esc(m.stationName) + "</strong>";
+      const primaryLoc = m.missionPoiName || m.stationName;
+      const subParts = [];
+      if (m.missionPoiName && m.stationName && m.missionPoiName !== m.stationName) subParts.push(m.stationName);
+      if (sysSec) subParts.push(sysSec);
+      const subLoc = subParts.join(" · ");
+      if (primaryLoc && subLoc) {
+        locHtml = "<strong>" + esc(primaryLoc) + '</strong><div class="neu" style="font-size:11px">' + esc(subLoc) + "</div>";
+      } else if (primaryLoc) {
+        locHtml = "<strong>" + esc(primaryLoc) + "</strong>";
       } else if (sysSec) {
         locHtml = '<span class="neu">' + esc(sysSec) + "</span>";
       }
@@ -3660,12 +3830,205 @@
     }
   });
 
+  // ------------------------------------------------------------------
+  // Kill Log & Wave Tracker (zKillboard style)
+  // ------------------------------------------------------------------
+  let killsData = null;
+  let killsClassFilter = "";
+  let selectedKillId = null;
+
+  function fmtKillTime(iso) {
+    if (!iso) return "--";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    } catch { return iso; }
+  }
+
+  function renderKillmailDetail(kill) {
+    const box = $("zk-killmail-detail");
+    if (!kill) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    box.classList.remove("hidden");
+    const rankCls = "zk-rank-" + (kill.victimRank || "Standard");
+    box.innerHTML =
+      '<div class="zk-killmail-hdr">' +
+        '<div><span class="mono neg" style="font-weight:700">KILLMAIL #' + kill.id + '</span> &nbsp; ' +
+        '<strong style="font-size:15px">' + esc(kill.victimClass) + '</strong>' +
+        '<span class="zk-rank-badge ' + esc(rankCls) + '">' + esc(kill.victimRank || "Standard") + '</span>' +
+        ' <span class="muted">Lv ' + esc(kill.victimLevel) + '</span></div>' +
+        '<button class="btn" type="button" id="btn-close-killmail">Close</button>' +
+      '</div>' +
+      '<div class="zk-killmail-grid">' +
+        '<div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Victim Ship</span><span class="zk-km-v">' + esc(kill.victimClass) + (kill.victimSize ? " (" + esc(kill.victimSize) + ")" : "") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Faction</span><span class="zk-km-v">' + esc(kill.victimFaction || "Unknown") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Rank / Level</span><span class="zk-km-v">' + esc(kill.victimRank || "Standard") + ' · Lv ' + esc(kill.victimLevel) + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Point Value</span><span class="zk-km-v">' + esc(kill.pointValue) + '</span></div>' +
+        '</div>' +
+        '<div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Final Blow</span><span class="zk-km-v pos">' + esc(kill.killerName || "Fleet") + (kill.killerClass && kill.killerClass !== kill.killerName ? " (" + esc(kill.killerClass) + ")" : "") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Weapon</span><span class="zk-km-v">' + esc(kill.weaponName || "—") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Location</span><span class="zk-km-v">' + esc(kill.systemName || "—") + (kill.poiName ? " · " + esc(kill.poiName) : "") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Mission / Wave</span><span class="zk-km-v">' + esc(kill.missionName || "—") + (kill.waveNumber > 0 ? " (Wave " + kill.waveNumber + ")" : "") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Timestamp</span><span class="zk-km-v">' + esc(fmtKillTime(kill.timestamp)) + '</span></div>' +
+        '</div>' +
+      '</div>';
+    const closeBtn = $("btn-close-killmail");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        selectedKillId = null;
+        renderKillmailDetail(null);
+      });
+    }
+  }
+
+  function renderKills(data) {
+    if (!data) return;
+    killsData = data;
+    $("count-kills").textContent = data.totalKills || 0;
+    $("zk-total-kills").textContent = (data.totalKills || 0).toLocaleString();
+    $("zk-mission-kills").textContent = "Current POI/Mission: " + (data.currentMissionKills || 0).toLocaleString();
+    $("zk-total-waves").textContent = (data.totalWaves || 0).toLocaleString();
+    $("zk-mission-waves").textContent = "Current POI/Mission: " + (data.currentMissionWaves || 0).toLocaleString();
+
+    const byClass = data.byClass || [];
+    $("zk-class-total").textContent = byClass.length + " class" + (byClass.length === 1 ? "" : "es");
+    if (byClass.length > 0) {
+      $("zk-top-class").textContent = byClass[0].shipClass;
+      $("zk-top-class-sub").textContent = byClass[0].count.toLocaleString() + " kills";
+    } else {
+      $("zk-top-class").textContent = "--";
+      $("zk-top-class-sub").textContent = "0 kills";
+    }
+
+    const byKiller = data.byKiller || [];
+    if (byKiller.length > 0) {
+      $("zk-top-killer").textContent = byKiller[0].killer;
+      $("zk-top-killer-sub").textContent = byKiller[0].count.toLocaleString() + " kills";
+    } else {
+      $("zk-top-killer").textContent = "--";
+      $("zk-top-killer-sub").textContent = "0 kills";
+    }
+
+    $("zk-wave-context").textContent = data.currentPoi ? (data.currentPoi + (data.currentMission ? " · " + data.currentMission : "")) : "";
+
+    // Class pills
+    const pillsEl = $("zk-class-pills");
+    if (!byClass.length) {
+      pillsEl.innerHTML = '<span class="muted" style="font-size:11px">No kills recorded yet.</span>';
+    } else {
+      let ph = "";
+      for (const c of byClass) {
+        const active = killsClassFilter && killsClassFilter.toLowerCase() === c.shipClass.toLowerCase();
+        ph += '<button type="button" class="zk-pill' + (active ? ' active' : '') + '" data-cls="' + esc(c.shipClass) + '">' +
+          '<span>' + esc(c.shipClass) + (c.isDrone ? ' <span class="muted">(Drone)</span>' : '') + '</span>' +
+          '<span class="zk-pill-cnt">' + c.count + '</span></button>';
+      }
+      pillsEl.innerHTML = ph;
+      pillsEl.querySelectorAll(".zk-pill").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const cls = btn.getAttribute("data-cls") || "";
+          killsClassFilter = (killsClassFilter.toLowerCase() === cls.toLowerCase()) ? "" : cls;
+          renderKills(killsData);
+        });
+      });
+    }
+
+    $("kills-filter-badge").textContent = killsClassFilter ? ("Filter: " + killsClassFilter) : "";
+
+    // Wave list
+    const waveEl = $("zk-wave-list");
+    const waves = data.waves || [];
+    if (!waves.length) {
+      waveEl.innerHTML = '<span class="muted" style="font-size:11px">No reinforcement waves spawned yet.</span>';
+    } else {
+      let wh = "";
+      for (const w of waves.slice(0, 50)) {
+        const comp = (w.units || []).map((u) => u.count + "x " + u.shipClass + (u.rank && u.rank !== "Standard" ? " [" + u.rank + "]" : "")).join(", ");
+        wh += '<div class="zk-wave-row">' +
+          '<div><span class="zk-wave-badge">WAVE ' + w.waveNumber + '</span> <span class="mono">' + w.unitCount + ' ships</span> — ' + esc(comp) + '</div>' +
+          '<div class="mono muted" style="white-space:nowrap">' + esc(fmtKillTime(w.timestamp)) + '</div>' +
+        '</div>';
+      }
+      waveEl.innerHTML = wh;
+    }
+
+    // Killmail table
+    const kills = (data.kills || []).filter((k) => !killsClassFilter || (k.victimClass || "").toLowerCase() === killsClassFilter.toLowerCase());
+    if (selectedKillId != null) {
+      const found = (data.kills || []).find((k) => k.id === selectedKillId);
+      renderKillmailDetail(found || null);
+    }
+
+    const tblEl = $("kills-table-container");
+    if (!kills.length) {
+      tblEl.innerHTML = '<div class="empty-state">No kills recorded yet. Destroy enemy ships to populate the killboard.</div>';
+      return;
+    }
+    let th = '<table class="data-table"><thead><tr>' +
+      '<th>Time</th><th>Victim</th><th>Faction</th><th>Final Blow</th><th>Location / Mission</th><th>Wave</th><th>Pts</th>' +
+      '</tr></thead><tbody>';
+    for (const k of kills.slice(0, 200)) {
+      const rankCls = "zk-rank-" + (k.victimRank || "Standard");
+      const rankHtml = (k.victimRank && k.victimRank !== "Standard")
+        ? '<span class="zk-rank-badge ' + esc(rankCls) + '">' + esc(k.victimRank) + '</span>'
+        : '';
+      th += '<tr class="zk-kill-row" data-kill-id="' + k.id + '">' +
+        '<td class="mono muted">' + esc(fmtKillTime(k.timestamp)) + '</td>' +
+        '<td><strong>' + esc(k.victimClass) + '</strong>' + rankHtml +
+          '<div class="muted" style="font-size:10px">' + esc(k.victimSize || (k.isDrone ? "Drone" : "")) + (k.victimLevel ? " · Lv " + k.victimLevel : "") + '</div></td>' +
+        '<td>' + esc(k.victimFaction || "—") + '</td>' +
+        '<td><span class="pos">' + esc(k.killerName || "Fleet") + '</span>' +
+          (k.weaponName ? '<div class="muted" style="font-size:10px">' + esc(k.weaponName) + '</div>' : '') + '</td>' +
+        '<td>' + esc(k.poiName || k.systemName || "—") +
+          (k.missionName ? '<div class="muted" style="font-size:10px">' + esc(k.missionName) + '</div>' : '') + '</td>' +
+        '<td class="mono">' + (k.waveNumber > 0 ? '<span class="zk-wave-badge">W' + k.waveNumber + '</span>' : '<span class="muted">—</span>') + '</td>' +
+        '<td class="mono">' + esc(k.pointValue || 0) + '</td>' +
+      '</tr>';
+    }
+    th += '</tbody></table>';
+    tblEl.innerHTML = th;
+    tblEl.querySelectorAll(".zk-kill-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const id = parseInt(row.getAttribute("data-kill-id"), 10);
+        selectedKillId = id;
+        const found = (killsData && killsData.kills || []).find((x) => x.id === id);
+        renderKillmailDetail(found || null);
+      });
+    });
+  }
+
+  async function fetchKills() {
+    try {
+      const resp = await fetch("/api/kills");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      renderKills(data);
+    } catch { }
+  }
+
+  $("btn-clear-kills").addEventListener("click", async () => {
+    try {
+      await fetch("/api/kills/clear", { method: "POST" });
+      killsClassFilter = "";
+      selectedKillId = null;
+      renderKillmailDetail(null);
+      fetchKills();
+    } catch { }
+  });
+
   // Boot
   fetchState();
   fetchHistory();
+  fetchKills();
   fetchEnhancedStatus(false);
   connectSSE();
   historyTimer = setInterval(fetchHistory, 30000);
+  setInterval(fetchKills, 3000);
 })();
 </script>
 </body>

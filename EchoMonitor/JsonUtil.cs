@@ -907,6 +907,7 @@ namespace EchoMonitor
             sb.Append(",\"isStory\":"); AppendBool(sb, e.IsStory);
             sb.Append(",\"reason\":"); AppendString(sb, e.Reason);
             sb.Append(",\"stationName\":"); AppendString(sb, e.StationName);
+            sb.Append(",\"missionPoiName\":"); AppendString(sb, e.MissionPoiName);
             sb.Append(",\"systemName\":"); AppendString(sb, e.SystemName);
             sb.Append(",\"sectorName\":"); AppendString(sb, e.SectorName);
             if (e.BoardMissions != null && e.BoardMissions.Count > 0)
@@ -938,6 +939,7 @@ namespace EchoMonitor
                 IsStory = root.TryGetValue("isStory", out var v) && v is bool b && b,
                 Reason = GetString(root, "reason", string.Empty),
                 StationName = GetString(root, "stationName", string.Empty),
+                MissionPoiName = GetString(root, "missionPoiName", string.Empty),
                 SystemName = GetString(root, "systemName", string.Empty),
                 SectorName = GetString(root, "sectorName", string.Empty)
             };

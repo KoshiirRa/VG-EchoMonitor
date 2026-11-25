@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Logging;
 using EchoMonitor.Patches;
@@ -37,12 +39,14 @@ namespace EchoMonitor
         private TelemetryCollector _collector;
         private StuckDetector _stuckDetector;
         private SessionManager _sessionManager;
+        private KillTracker _killTracker;
         private HttpServer _server;
         private Process _botProcess;
         private bool _shutdownDone;
 
         private string _latestStateJson = "{\"inGame\":false,\"timestamp\":\"\",\"saveId\":\"\",\"sessionStartedAt\":\"\",\"sessionDurationHours\":0,\"echo\":null,\"crew\":null,\"droneBay\":null,\"hangarBay\":null,\"fleet\":null,\"alerts\":null,\"empire\":null,\"missionLog\":[],\"current\":null,\"baseline\":null,\"deltas\":null}";
         private readonly object _stateLock = new object();
+        private int _jsonBuildInFlight;
         private float _nextSampleTime;
 
         private void Awake()
@@ -61,6 +65,7 @@ namespace EchoMonitor
             _collector = new TelemetryCollector();
             _sessionManager = new SessionManager(Paths.ConfigPath);
             _stuckDetector = new StuckDetector();
+            _killTracker = new KillTracker();
 
             EchoPatches.OnPlayerEmergencyWarp = (poi, mission) => _stuckDetector.RecordEmergencyWarp(poi, mission);
             EchoPatches.OnMissionEvent = entry => _sessionManager.RecordMissionEvent(entry);
@@ -69,6 +74,8 @@ namespace EchoMonitor
             EchoPatches.OnEmpireCrafted = (item, amt) => _sessionManager.RecordEmpireCrafted(item, amt);
             EchoPatches.OnEmpireTradeRun = (earned, spent, profit) => _sessionManager.RecordEmpireTradeRun(earned, spent, profit);
             EchoPatches.OnEmpireSale = credits => _sessionManager.RecordEmpireSale(credits);
+            EchoPatches.OnEnemyKilled = kill => _killTracker.RecordKill(kill);
+            EchoPatches.OnWaveSpawned = wave => _killTracker.RecordWave(wave);
 
             _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
             EchoPatches.Apply(_harmony);
@@ -90,6 +97,9 @@ namespace EchoMonitor
                 HandleWarpDefend,
                 HandleDismissAlerts,
                 HandleRelieveOutpost);
+
+            _server.RegisterRoute("GET", "/api/kills", _ => _killTracker.GetKillsJson());
+            _server.RegisterRoute("POST", "/api/kills/clear", _ => { _killTracker.Clear(); return "{\"ok\":true}"; });
 
             try
             {
@@ -191,19 +201,45 @@ namespace EchoMonitor
 
         private void RefreshStateOnMainThread()
         {
+            if (Interlocked.CompareExchange(ref _jsonBuildInFlight, 1, 0) != 0)
+            {
+                return;
+            }
+
+            LiveTelemetry telemetry;
+            int intervalMinutes;
             try
             {
-                var telemetry = _collector.Collect(_stuckDetector);
-                string json = _sessionManager.BuildStateJson(telemetry, _config.SnapshotIntervalMinutes.Value);
-                lock (_stateLock)
-                {
-                    _latestStateJson = json;
-                }
+                telemetry = _collector.Collect(_stuckDetector);
+                intervalMinutes = _config.SnapshotIntervalMinutes.Value;
             }
             catch (Exception ex)
             {
+                Interlocked.Exchange(ref _jsonBuildInFlight, 0);
                 Log.LogWarning($"Telemetry refresh error: {ex.Message}");
+                return;
             }
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    if (_shutdownDone) return;
+                    string json = _sessionManager.BuildStateJson(telemetry, intervalMinutes);
+                    lock (_stateLock)
+                    {
+                        _latestStateJson = json;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log?.LogWarning($"Telemetry JSON build error: {ex.Message}");
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _jsonBuildInFlight, 0);
+                }
+            });
         }
 
         private string GetCachedOrLiveStateJson()
