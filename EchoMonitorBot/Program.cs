@@ -76,7 +76,7 @@ public static class Program
         var tasks = new List<Task>
         {
             _discord.RunAsync(cts.Token),
-            RunSseLoopAsync(cts.Token)
+            RunSseLoopAsync(cts)
         };
 
         if (_config.DigestIntervalMinutes > 0)
@@ -86,8 +86,9 @@ public static class Program
         return 0;
     }
 
-    private static async Task RunSseLoopAsync(CancellationToken ct)
+    private static async Task RunSseLoopAsync(CancellationTokenSource cts)
     {
+        var ct = cts.Token;
         double backoff = 2.0;
 
         while (!ct.IsCancellationRequested)
@@ -132,13 +133,25 @@ public static class Program
                         _offlineAlertSent = false;
                         Console.WriteLine($"[SSE] Clean shutdown received: {shutdownReason}");
 
+                        string desc = _config.ExitOnCleanShutdown
+                            ? $"EchoMonitor reported a clean game exit (`{shutdownReason}`). EchoMonitorBot is shutting down."
+                            : $"EchoMonitor reported a clean game exit (`{shutdownReason}`).";
                         var embed = MakeEmbed(
                             "Vanguard Galaxy Closed Cleanly",
-                            $"EchoMonitor reported a clean game exit (`{shutdownReason}`).",
+                            desc,
                             0x64748B);
                         await _discord.PostChannelMessageAsync(embed, ct: ct);
+
+                        if (_config.ExitOnCleanShutdown)
+                        {
+                            Console.WriteLine("[EchoMonitorBot] Clean game shutdown received; exiting gracefully.");
+                            cts.Cancel();
+                        }
                     },
                     ct: ct);
+
+                if (cleanShutdown && _config.ExitOnCleanShutdown)
+                    break;
 
                 if (!cleanShutdown)
                     await HandleUnexpectedDisconnectAsync(reason, ct);
@@ -907,7 +920,7 @@ public static class Program
         fields.Add(MakeField("Depot Refined Products", string.Join("\n", refLines), true));
 
         string depotDesc = GetInt(empire, "depotCount") > 0
-            ? $"Active Depots: **{GetInt(empire, "depotCount")}** — **{GetDbl(empire, "depotFillPct"):0.1}%** full ({FmtNum((long)GetDbl(empire, "depotSpaceUsed"))} / {FmtNum((long)GetDbl(empire, "depotCapacity"))} m³)"
+            ? $"Active Depots: **{GetInt(empire, "depotCount")}** — **{GetDbl(empire, "depotFillPct"):0.0}%** full ({FmtNum((long)GetDbl(empire, "depotSpaceUsed"))} / {FmtNum((long)GetDbl(empire, "depotCapacity"))} m³)"
             : "No active supply depot configured.";
 
         return MakeEmbed("Empire & Refining Overview", depotDesc, 0x38BDF8, fields);

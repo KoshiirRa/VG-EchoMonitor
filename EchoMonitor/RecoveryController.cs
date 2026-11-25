@@ -347,7 +347,8 @@ namespace EchoMonitor
         }
 
         /// <summary>
-        /// Moves half (floor(count / 2)) of the single largest item stack in the target outpost
+        /// Creates a one-off CargoRoute (non-repeating, auto-removed when done) to haul half
+        /// (floor(count / 2)) of the single largest shippable item stack in the target outpost
         /// back to its sector's Supply Depot (falling back to homeStation if no depot is set).
         /// Must ONLY be called on the Unity main thread.
         /// </summary>
@@ -357,6 +358,16 @@ namespace EchoMonitor
             if (gp == null)
             {
                 return new RecoveryResult { Ok = false, Message = "Not currently in game." };
+            }
+
+            if (gp.routes == null)
+            {
+                return new RecoveryResult
+                {
+                    Ok = false,
+                    Message = "Player trade routes system is not initialized.",
+                    EchoEnabled = gp.autoPlay
+                };
             }
 
             PlayerStation target = null;
@@ -431,6 +442,7 @@ namespace EchoMonitor
             foreach (var entry in target.materialStorage.items)
             {
                 if (entry == null || entry.item == null || entry.count < 2) continue;
+                if (!CargoRunEntry.CanShip(entry.item)) continue;
                 float m3 = entry.spaceRequired;
                 if (m3 > largestM3 || (Math.Abs(m3 - largestM3) < 0.001f && entry.count > largestCount))
                 {
@@ -445,7 +457,7 @@ namespace EchoMonitor
                 return new RecoveryResult
                 {
                     Ok = false,
-                    Message = $"No stack with >= 2 items found in {target.name} to transfer.",
+                    Message = $"No shippable stack with >= 2 items found in {target.name}.",
                     TargetStation = target.name ?? string.Empty,
                     TargetSystem = target.system?.name ?? string.Empty,
                     EchoEnabled = gp.autoPlay
@@ -454,6 +466,12 @@ namespace EchoMonitor
 
             int moveCount = largest.count / 2;
             float itemM3 = largest.item.m3 > 0f ? largest.item.m3 : 1f;
+            int maxConvoyFit = (int)Math.Floor(CargoRoute.MaxConvoyM3 / itemM3);
+            if (maxConvoyFit > 0 && moveCount > maxConvoyFit)
+            {
+                moveCount = maxConvoyFit;
+            }
+
             float depotAvail = depot.materialStorage.GetSpaceAvailable();
             int maxFit = (int)Math.Floor(depotAvail / itemM3);
             if (maxFit <= 0)
@@ -469,6 +487,23 @@ namespace EchoMonitor
             }
             if (moveCount > maxFit) moveCount = maxFit;
 
+            int jumpDistance = 0;
+            if (GalaxyMapData.current != null && target.system != null && depot.system != null)
+            {
+                jumpDistance = GalaxyMapData.current.GetJumpDistance(target.system, depot.system, 200);
+                if (jumpDistance < 0)
+                {
+                    return new RecoveryResult
+                    {
+                        Ok = false,
+                        Message = $"No jump path found from {target.name} to {depot.name}.",
+                        TargetStation = target.name ?? string.Empty,
+                        TargetSystem = target.system?.name ?? string.Empty,
+                        EchoEnabled = gp.autoPlay
+                    };
+                }
+            }
+
             string rawItemName = !string.IsNullOrEmpty(largest.item.displayName)
                 ? largest.item.displayName
                 : largest.item.identifier;
@@ -476,33 +511,30 @@ namespace EchoMonitor
                 ? (Translation.Translate(rawItemName) ?? rawItemName)
                 : (rawItemName ?? "Unknown");
 
-            int removed = target.materialStorage.Remove(largest.item, moveCount);
-            if (removed <= 0)
-            {
-                return new RecoveryResult
-                {
-                    Ok = false,
-                    Message = $"Failed to remove {moveCount:N0}x {itemName} from {target.name}.",
-                    TargetStation = target.name ?? string.Empty,
-                    TargetSystem = target.system?.name ?? string.Empty,
-                    EchoEnabled = gp.autoPlay
-                };
-            }
+            CargoRoute route = gp.routes.AddRoute(target, depot, jumpDistance);
+            route.rules.Clear();
+            route.rules.Add(new CargoRouteRule(
+                CargoKind.Material,
+                new List<string> { largest.item.identifier },
+                RuleMode.FixedAmount,
+                moveCount));
+            route.isFastTransit = false;
+            route.isRepeating = false;
+            route.keepWhenDone = false;
+            route.Rename($"Relief: {itemName}");
 
-            depot.materialStorage.Add(largest.item, removed);
-
-            double capAfter = target.materialStorage.capacity;
-            double newFillPct = capAfter > 0 ? Math.Round((target.materialStorage.spaceUsed / capAfter) * 100.0, 1) : 0.0;
+            double capNow = target.materialStorage.capacity;
+            double curFillPct = capNow > 0 ? Math.Round((target.materialStorage.spaceUsed / capNow) * 100.0, 1) : 0.0;
 
             return new RecoveryResult
             {
                 Ok = true,
-                Message = $"Moved {removed:N0}x {itemName} from {target.name} → {depot.name}. {target.name} is now at {newFillPct:F1}%.",
+                Message = $"Dispatched one-off route for {moveCount:N0}x {itemName}: {target.name} → {depot.name} ({jumpDistance} jumps).",
                 TargetStation = target.name ?? string.Empty,
                 TargetSystem = target.system?.name ?? string.Empty,
                 ItemName = itemName,
-                MovedCount = removed,
-                NewFillPct = newFillPct,
+                MovedCount = moveCount,
+                NewFillPct = curFillPct,
                 EchoEnabled = gp.autoPlay
             };
         }

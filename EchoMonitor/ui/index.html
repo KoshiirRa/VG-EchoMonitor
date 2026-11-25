@@ -1897,23 +1897,64 @@
     }
 
     // 4. Depot Refined Products
+    const PINNED_REFINED = [
+      { name: "Titanium", color: "#2ea3f2" },
+      { name: "Oxide",    color: "#1ad9a5" },
+      { name: "Silicon",  color: "#b07b4f" },
+      { name: "Tungsten", color: "#c842f5" },
+      { name: "Carbon",   color: "#8a929c" },
+      { name: "Iridium",  color: "#f03838" },
+      { name: "Platinum", color: "#d4dbe3" },
+      { name: "Astatine", color: "#32e062" }
+    ];
     const refDelta = Number(emp.refinedStockDelta || 0);
     const refRate = Number(emp.refinedStockRatePerHour || 0);
     $("empire-refined-badge").textContent =
       "Total: " + fmtNum(emp.refinedStockTotal || 0) + " (" + fmtSigned(refDelta) + ", " + fmtSigned(refRate) + "/hr)";
-    const refItems = Array.isArray(emp.refinedStockItems) ? emp.refinedStockItems.slice(0, 20) : [];
-    if (!refItems.length) {
-      $("empire-refined-container").innerHTML = '<div class="empty-state">No refined products in depot.</div>';
-    } else {
-      const rows = refItems.map((it) =>
-        '<tr><td>' + esc(it.name) + '</td>' +
-        '<td class="mono" style="text-align:right">' + fmtNum(it.current) + '</td>' +
-        '<td class="mono ' + deltaClass(it.delta) + '" style="text-align:right">' + fmtSigned(it.delta) + '</td>' +
-        '<td class="mono neu" style="text-align:right">' + fmtSigned(it.ratePerHour) + '/hr</td></tr>'
-      ).join("");
-      $("empire-refined-container").innerHTML =
-        '<table class="data-table"><thead><tr><th>Refined Product</th><th style="text-align:right">Depot Stock</th><th style="text-align:right">Session Δ</th><th style="text-align:right">Rate</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    const rawRefItems = Array.isArray(emp.refinedStockItems) ? emp.refinedStockItems : [];
+    const refByName = new Map();
+    for (const it of rawRefItems) {
+      if (it && it.name) refByName.set(String(it.name).toLowerCase(), it);
     }
+    const pinnedNames = new Set(PINNED_REFINED.map((p) => p.name.toLowerCase()));
+    const pinnedEntries = PINNED_REFINED.map((p) => {
+      const existing = refByName.get(p.name.toLowerCase());
+      return {
+        name: existing ? existing.name : p.name,
+        current: existing ? existing.current : 0,
+        delta: existing ? existing.delta : 0,
+        ratePerHour: existing ? existing.ratePerHour : 0,
+        color: p.color,
+        pinned: true
+      };
+    });
+    const otherRefEntries = rawRefItems
+      .filter((it) => it && it.name && !pinnedNames.has(String(it.name).toLowerCase()))
+      .slice(0, 20)
+      .map((it) => ({
+        name: it.name,
+        current: it.current,
+        delta: it.delta,
+        ratePerHour: it.ratePerHour,
+        color: null,
+        pinned: false
+      }));
+    const allRefEntries = pinnedEntries.concat(otherRefEntries);
+    const rows = allRefEntries.map((it, idx) => {
+      const isDivider = it.pinned && idx === pinnedEntries.length - 1 && otherRefEntries.length > 0;
+      const rowStyle = isDivider ? ' style="border-bottom:1px solid var(--border)"' : '';
+      const nameHtml = it.color
+        ? '<span style="display:inline-block;width:8px;height:8px;border-radius:1px;background:' + it.color + ';margin-right:6px;vertical-align:middle"></span>' +
+          '<span style="color:' + it.color + ';font-weight:600">' + esc(it.name) + '</span>'
+        : esc(it.name);
+      const stockClass = Number(it.current || 0) === 0 ? "mono neu" : "mono";
+      return '<tr' + rowStyle + '><td>' + nameHtml + '</td>' +
+        '<td class="' + stockClass + '" style="text-align:right">' + fmtNum(it.current) + '</td>' +
+        '<td class="mono ' + deltaClass(it.delta) + '" style="text-align:right">' + fmtSigned(it.delta) + '</td>' +
+        '<td class="mono neu" style="text-align:right">' + fmtSigned(it.ratePerHour) + '/hr</td></tr>';
+    }).join("");
+    $("empire-refined-container").innerHTML =
+      '<table class="data-table"><thead><tr><th>Refined Product</th><th style="text-align:right">Depot Stock</th><th style="text-align:right">Session Δ</th><th style="text-align:right">Rate</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function renderRank(key, val, delta) {
@@ -2028,6 +2069,15 @@
       "</tr></thead><tbody>" + rows + "</tbody></table></div>";
   }
 
+  const SHIP_BP_REQUIRED_BY_SIZE = {
+    Size1: 4,
+    Size2: 6,
+    Size3: 8,
+    Size4: 10,
+    Size5: 12,
+    Size6: 14,
+  };
+
   function renderShipBlueprints(bps) {
     if (!bps.length) {
       $("ship-bps-container").innerHTML = '<div class="empty-state">No new ship blueprint pieces obtained this session.</div>';
@@ -2035,14 +2085,17 @@
     }
 
     const cards = bps.map((bp) => {
-      const req = Math.max(1, Number(bp.required || 10));
+      const req = Number(bp.required) || SHIP_BP_REQUIRED_BY_SIZE[bp.size] || 0;
       const total = Number(bp.total || 0);
-      const pct = Math.min(100, Math.round((total / req) * 100));
+      const pct = req > 0 ? Math.min(100, Math.round((total / req) * 100)) : 0;
       const badge = bp.alreadyUnlocked
         ? '<span class="badge-unlocked">UNLOCKED</span>'
         : bp.canComplete
           ? '<span class="badge-ready">READY</span>'
           : "";
+      const progressText = req > 0
+        ? fmtNum(total) + " / " + fmtNum(req) + " (" + pct + "%)"
+        : fmtNum(total) + " pcs";
       return (
         '<div class="bp-card' + (bp.canComplete && !bp.alreadyUnlocked ? " ready" : "") + '">' +
           '<div class="bp-header">' +
@@ -2053,7 +2106,7 @@
           '<div class="bar-row">' +
             '<div class="bar-header">' +
               '<span class="pos">+' + fmtNum(bp.gained) + " pcs</span>" +
-              "<span>" + fmtNum(total) + " / " + fmtNum(req) + " (" + pct + "%)</span>" +
+              "<span>" + progressText + "</span>" +
             "</div>" +
             '<div class="bar-track"><div class="bar-fill ' + (bp.canComplete ? "bp-ready" : "bp") + '" style="width:' + pct + '%"></div></div>' +
           "</div>" +
