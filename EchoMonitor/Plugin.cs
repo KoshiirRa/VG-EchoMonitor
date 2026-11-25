@@ -11,7 +11,25 @@ namespace EchoMonitor
     [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
     public sealed class Plugin : BaseUnityPlugin
     {
+        public static Plugin Instance { get; private set; }
         public static ManualLogSource Log { get; private set; }
+
+        public static void RegisterExtensionRoute(string method, string path, Func<string, string> handler)
+        {
+            Instance?._server?.RegisterRoute(method, path, handler);
+        }
+
+        public static void UnregisterExtensionRoute(string method, string path)
+        {
+            Instance?._server?.UnregisterRoute(method, path);
+        }
+
+        public static T RunOnMainThread<T>(Func<T> func, int timeoutMs = 5000)
+        {
+            var disp = Instance?._dispatcher;
+            if (disp == null) throw new InvalidOperationException("EchoMonitor dispatcher is not initialized.");
+            return disp.Invoke(func, timeoutMs);
+        }
 
         private Harmony _harmony;
         private EchoConfig _config;
@@ -20,6 +38,8 @@ namespace EchoMonitor
         private StuckDetector _stuckDetector;
         private SessionManager _sessionManager;
         private HttpServer _server;
+        private Process _botProcess;
+        private bool _shutdownDone;
 
         private string _latestStateJson = "{\"inGame\":false,\"timestamp\":\"\",\"saveId\":\"\",\"sessionStartedAt\":\"\",\"sessionDurationHours\":0,\"echo\":null,\"crew\":null,\"droneBay\":null,\"hangarBay\":null,\"fleet\":null,\"alerts\":null,\"empire\":null,\"missionLog\":[],\"current\":null,\"baseline\":null,\"deltas\":null}";
         private readonly object _stateLock = new object();
@@ -27,6 +47,7 @@ namespace EchoMonitor
 
         private void Awake()
         {
+            Instance = this;
             Log = Logger;
             _config = new EchoConfig(Config);
 
@@ -51,6 +72,9 @@ namespace EchoMonitor
 
             _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
             EchoPatches.Apply(_harmony);
+
+            UnityEngine.Application.quitting += Shutdown;
+            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
 
             _server = new HttpServer(
                 _config,
@@ -104,12 +128,65 @@ namespace EchoMonitor
             }
         }
 
+        private void OnApplicationQuit()
+        {
+            Shutdown();
+        }
+
         private void OnDestroy()
         {
+            Shutdown();
+        }
+
+        private void OnProcessExit(object sender, EventArgs e)
+        {
+            Shutdown();
+        }
+
+        private void Shutdown()
+        {
+            if (_shutdownDone) return;
+            _shutdownDone = true;
+
+            try { UnityEngine.Application.quitting -= Shutdown; } catch { }
+            try { AppDomain.CurrentDomain.ProcessExit -= OnProcessExit; } catch { }
+
             _server?.Dispose();
             _server = null;
+
+            StopCompanionBot();
+
             _harmony?.UnpatchSelf();
             _harmony = null;
+        }
+
+        private void StopCompanionBot()
+        {
+            var proc = _botProcess;
+            _botProcess = null;
+            if (proc == null) return;
+
+            try
+            {
+                if (!proc.HasExited)
+                {
+                    // Give the bot a brief window to receive the SSE shutdown event,
+                    // post its Discord clean-exit embed, and exit on its own.
+                    if (!proc.WaitForExit(3000))
+                    {
+                        Log.LogWarning("EchoMonitorBot did not exit within 3s of shutdown; terminating.");
+                        proc.Kill();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning($"Error stopping EchoMonitorBot: {ex.Message}");
+            }
+            finally
+            {
+                try { proc.Dispose(); } catch { }
+            }
         }
 
         private void RefreshStateOnMainThread()
@@ -236,7 +313,7 @@ namespace EchoMonitor
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-                Process.Start(psi);
+                _botProcess = Process.Start(psi);
                 Log.LogInfo($"Auto-launched EchoMonitorBot from {exePath}");
             }
             catch (Exception ex)

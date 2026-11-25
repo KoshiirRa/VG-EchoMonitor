@@ -32,6 +32,20 @@ namespace EchoMonitor
         private Task _acceptLoopTask;
         private byte[] _cachedUiBytes;
         private readonly ConcurrentDictionary<Guid, Stream> _sseClients = new ConcurrentDictionary<Guid, Stream>();
+        private readonly ConcurrentDictionary<string, Func<string, string>> _extensionRoutes =
+            new ConcurrentDictionary<string, Func<string, string>>(StringComparer.OrdinalIgnoreCase);
+
+        public void RegisterRoute(string method, string path, Func<string, string> handler)
+        {
+            if (string.IsNullOrWhiteSpace(method) || string.IsNullOrWhiteSpace(path) || handler == null) return;
+            _extensionRoutes[$"{method.Trim().ToUpperInvariant()}:{path.Trim()}"] = handler;
+        }
+
+        public void UnregisterRoute(string method, string path)
+        {
+            if (string.IsNullOrWhiteSpace(method) || string.IsNullOrWhiteSpace(path)) return;
+            _extensionRoutes.TryRemove($"{method.Trim().ToUpperInvariant()}:{path.Trim()}", out _);
+        }
 
         public HttpServer(
             EchoConfig config,
@@ -91,16 +105,22 @@ namespace EchoMonitor
         {
             if (_sseClients.IsEmpty) return;
             byte[] payload = Encoding.UTF8.GetBytes("event: shutdown\ndata: {\"reason\":\"clean_exit\"}\n\n");
+            bool sentAny = false;
             foreach (var kv in _sseClients)
             {
                 try
                 {
                     kv.Value.Write(payload, 0, payload.Length);
                     kv.Value.Flush();
+                    sentAny = true;
                 }
                 catch { }
             }
             _sseClients.Clear();
+            if (sentAny)
+            {
+                try { Thread.Sleep(150); } catch { }
+            }
         }
 
         public void Dispose()
@@ -293,6 +313,23 @@ namespace EchoMonitor
                         WriteJson(resp, 200, _relieveOutpostJson(stationGuid));
                         return;
                     }
+                }
+
+                string routeKey = $"{req.HttpMethod.ToUpperInvariant()}:{path}";
+                if (_extensionRoutes.TryGetValue(routeKey, out var extHandler))
+                {
+                    string payload = string.Empty;
+                    if (req.HasEntityBody)
+                    {
+                        using var reader = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
+                        payload = await reader.ReadToEndAsync().ConfigureAwait(false);
+                    }
+                    else if (!string.IsNullOrEmpty(req.Url?.Query))
+                    {
+                        payload = req.Url.Query;
+                    }
+                    WriteJson(resp, 200, extHandler(payload) ?? "{}");
+                    return;
                 }
 
                 WriteJson(resp, 404, "{\"error\":\"Not Found\"}");
