@@ -7,6 +7,7 @@ using HarmonyLib;
 using Source.Galaxy.POI;
 using Source.Galaxy.Trade;
 using Source.MissionSystem;
+using Source.Player;
 using Source.SpaceShip;
 using Source.Util;
 
@@ -174,6 +175,44 @@ namespace EchoMonitor.Patches
                     ? (Translation.Translate(reason) ?? reason)
                     : (reason ?? string.Empty);
 
+                string stationName = string.Empty;
+                string systemName = string.Empty;
+                string sectorName = string.Empty;
+                var boardMissions = new List<MissionBoardEntry>();
+                var gp = GamePlayer.current;
+                if (gp != null)
+                {
+                    var sys = gp.currentSystem;
+                    if (gp.currentPointOfInterest is SpaceStation st)
+                    {
+                        stationName = TranslateIfNeeded(st.name);
+                        if (sys == null) sys = st.system;
+
+                        if (string.Equals(evt, "Accepted", StringComparison.Ordinal) && st.missionBoard != null)
+                        {
+                            var avail = st.missionBoard.availableMissions;
+                            if (avail != null)
+                            {
+                                for (int i = 0; i < avail.Count; i++)
+                                {
+                                    var bm = BuildBoardEntry(avail[i], isUmbral: false);
+                                    if (bm != null) boardMissions.Add(bm);
+                                }
+                            }
+                            if (st.missionBoard.umbralMission != null)
+                            {
+                                var ubm = BuildBoardEntry(st.missionBoard.umbralMission, isUmbral: true);
+                                if (ubm != null) boardMissions.Add(ubm);
+                            }
+                        }
+                    }
+                    if (sys != null)
+                    {
+                        systemName = TranslateIfNeeded(sys.name);
+                        sectorName = TranslateIfNeeded(sys.sector?.name);
+                    }
+                }
+
                 OnMissionEvent.Invoke(new MissionLogEntry
                 {
                     Timestamp = DateTime.UtcNow.ToString("o"),
@@ -181,10 +220,41 @@ namespace EchoMonitor.Patches
                     MissionName = name,
                     GameplayType = mission.gameplayType.ToString(),
                     IsStory = !string.IsNullOrWhiteSpace(mission.storyId),
-                    Reason = translatedReason
+                    Reason = translatedReason,
+                    StationName = stationName,
+                    SystemName = systemName,
+                    SectorName = sectorName,
+                    BoardMissions = boardMissions
                 });
             }
             catch { }
+        }
+
+        private static MissionBoardEntry BuildBoardEntry(Mission m, bool isUmbral)
+        {
+            if (m == null) return null;
+            var tags = new List<string>();
+            var gt = m.gameplayType;
+            if (gt == 0) gt = m.primaryGameplayType;
+            if (gt != 0) tags.Add(gt.ToString());
+            tags.Add(m.difficulty.ToString());
+            if (m.targetLayer.HasValue) tags.Add(m.targetLayer.Value.ToString());
+            string cat = TranslateIfNeeded(m.category);
+            if (!string.IsNullOrWhiteSpace(cat) && !tags.Contains(cat)) tags.Add(cat);
+            if (m.canBeIdled) tags.Add("ECHO");
+            if (!string.IsNullOrWhiteSpace(m.storyId)) tags.Add("Story");
+            if (isUmbral) tags.Add("Umbral");
+            return new MissionBoardEntry
+            {
+                Name = TranslateIfNeeded(m.name),
+                Tags = tags
+            };
+        }
+
+        private static string TranslateIfNeeded(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return string.Empty;
+            return raw.StartsWith("@", StringComparison.Ordinal) ? (Translation.Translate(raw) ?? raw) : raw;
         }
 
         private static string ResolveItemName(InventoryItemType item)

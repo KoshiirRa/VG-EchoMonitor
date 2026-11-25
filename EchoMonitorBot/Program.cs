@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -46,7 +47,7 @@ public static class Program
     private static readonly Dictionary<(string Name, string Rarity, int ItemLevel, string StatsSig), int> SeenModuleCounts = new();
     private static readonly HashSet<string> SeenReadyBps = new(StringComparer.OrdinalIgnoreCase);
 
-    public static async Task<int> Main()
+    public static async Task<int> Main(string[] args)
     {
         try
         {
@@ -58,6 +59,8 @@ public static class Program
             return 1;
         }
 
+        int parentPid = ParseParentPid(args);
+
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -65,13 +68,31 @@ public static class Program
             cts.Cancel();
         };
 
+        // Hard-exit watchdog: once cancellation is requested from ANY source
+        // (SSE shutdown, Ctrl+C, or parent-PID exit), give tasks at most 3s to
+        // wind down, then force-exit so a hung WebSocket/HTTP call can never
+        // leave EchoMonitorBot orphaned.
+        using var cancelExitReg = cts.Token.Register(() =>
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                Environment.Exit(0);
+            });
+        });
+
+        if (parentPid > 0)
+        {
+            _ = WatchParentProcessAsync(parentPid, cts);
+        }
+
         using var api = new EchoMonitorClient(_config);
         using var discord = new DiscordGateway(_config);
         _api = api;
         _discord = discord;
         _discord.OnInteraction += HandleInteractionAsync;
 
-        Console.WriteLine($"[EchoMonitorBot] Starting (EchoMonitor={_config.EchoMonitorUrl}, Channel={_config.DiscordChannelId})");
+        Console.WriteLine($"[EchoMonitorBot] Starting (EchoMonitor={_config.EchoMonitorUrl}, Channel={_config.DiscordChannelId}{(parentPid > 0 ? $", ParentPid={parentPid}" : string.Empty)})");
 
         var tasks = new List<Task>
         {
@@ -82,8 +103,66 @@ public static class Program
         if (_config.DigestIntervalMinutes > 0)
             tasks.Add(RunDigestLoopAsync(cts.Token));
 
-        await Task.WhenAll(tasks);
+        try
+        {
+            await Task.WhenAll(tasks);
+        }
+        catch (OperationCanceledException) { }
         return 0;
+    }
+
+    private static int ParseParentPid(string[] args)
+    {
+        if (args != null)
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (string.Equals(args[i], "--parent-pid", StringComparison.OrdinalIgnoreCase) &&
+                    i + 1 < args.Length &&
+                    int.TryParse(args[i + 1], out int parsed) &&
+                    parsed > 0)
+                {
+                    return parsed;
+                }
+            }
+        }
+
+        string? envPid = Environment.GetEnvironmentVariable("ECHOMONITOR_PARENT_PID");
+        if (!string.IsNullOrWhiteSpace(envPid) && int.TryParse(envPid, out int fromEnv) && fromEnv > 0)
+        {
+            return fromEnv;
+        }
+
+        return 0;
+    }
+
+    private static async Task WatchParentProcessAsync(int parentPid, CancellationTokenSource cts)
+    {
+        try
+        {
+            using var parent = Process.GetProcessById(parentPid);
+            await parent.WaitForExitAsync();
+        }
+        catch (ArgumentException)
+        {
+            // Parent process already exited.
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[EchoMonitorBot] Parent watchdog warning: {ex.Message}");
+            return;
+        }
+
+        Console.WriteLine($"[EchoMonitorBot] Parent process {parentPid} exited; shutting down.");
+        if (!cts.IsCancellationRequested)
+        {
+            try { await Task.Delay(1500, cts.Token); } catch (OperationCanceledException) { }
+            try { cts.Cancel(); } catch { }
+        }
+
+        // Unconditional force-exit fallback even if cts was already cancelled earlier.
+        await Task.Delay(3000);
+        Environment.Exit(0);
     }
 
     private static async Task RunSseLoopAsync(CancellationTokenSource cts)
@@ -409,6 +488,14 @@ public static class Program
     private static async Task RunDigestLoopAsync(CancellationToken ct)
     {
         var interval = TimeSpan.FromMinutes(_config.DigestIntervalMinutes);
+        string windowLabel = _config.DigestIntervalMinutes % 60 == 0
+            ? $"last {_config.DigestIntervalMinutes / 60}h"
+            : $"last {_config.DigestIntervalMinutes}m";
+
+        string? lastSessionKey = null;
+        int? prevRawTotal = null;
+        int? prevRefTotal = null;
+
         while (!ct.IsCancellationRequested)
         {
             try
@@ -424,7 +511,27 @@ public static class Program
             lock (StateLock) { snap = _latestState; }
             if (_isOnline && snap.HasValue && GetBool(snap.Value, "inGame"))
             {
-                await _discord.PostChannelMessageAsync(BuildDigestEmbed(snap.Value), ct: ct);
+                var state = snap.Value;
+                string sessionKey = $"{GetStr(state, "saveId")}|{GetStr(state, "sessionStartedAt")}";
+                if (!string.Equals(sessionKey, lastSessionKey, StringComparison.Ordinal))
+                {
+                    lastSessionKey = sessionKey;
+                    prevRawTotal = null;
+                    prevRefTotal = null;
+                }
+
+                (int RawTotal, int RefTotal, string WindowLabel)? prevEmpire =
+                    prevRawTotal.HasValue && prevRefTotal.HasValue
+                        ? (prevRawTotal.Value, prevRefTotal.Value, windowLabel)
+                        : null;
+
+                await _discord.PostChannelMessageAsync(BuildDigestEmbed(state, prevEmpire), ct: ct);
+
+                if (TryGetObj(state, "empire", out var empire))
+                {
+                    prevRawTotal = GetInt(empire, "rawBacklogTotal");
+                    prevRefTotal = GetInt(empire, "refinedStockTotal");
+                }
             }
         }
     }
@@ -488,6 +595,28 @@ public static class Program
                     await _discord.ReplyInteractionAsync(interaction, text: "EchoMonitor is currently unreachable.", ephemeral: true);
                 else
                     await _discord.ReplyInteractionAsync(interaction, embed: BuildEmpireEmbed(state.Value));
+                break;
+            }
+            case "depot":
+            {
+                using var doc = await _api.GetDepotsAsync();
+                if (doc == null)
+                {
+                    await _discord.ReplyInteractionAsync(interaction, text: "EchoMonitor is currently unreachable.", ephemeral: true);
+                }
+                else
+                {
+                    interaction.Options.TryGetValue("location", out var location);
+                    interaction.Options.TryGetValue("filter", out var filter);
+                    interaction.Options.TryGetValue("search", out var search);
+                    interaction.Options.TryGetValue("sort", out var sort);
+                    await _discord.ReplyInteractionAsync(interaction, embed: BuildDepotEmbed(
+                        doc.RootElement,
+                        string.IsNullOrWhiteSpace(location) ? null : location.Trim(),
+                        string.IsNullOrWhiteSpace(filter) ? "all" : filter.Trim().ToLowerInvariant(),
+                        string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+                        string.IsNullOrWhiteSpace(sort) ? "count" : sort.Trim().ToLowerInvariant()));
+                }
                 break;
             }
             case "recover":
@@ -786,7 +915,7 @@ public static class Program
         return MakeEmbed("Recent Mission Log (Last 10)", Truncate(string.Join("\n", lines), 4000), 0x0EA5E9);
     }
 
-    private static JsonObject BuildDigestEmbed(JsonElement state)
+    private static JsonObject BuildDigestEmbed(JsonElement state, (int RawTotal, int RefTotal, string WindowLabel)? prevEmpire = null)
     {
         TryGetObj(state, "echo", out var echo);
         TryGetObj(state, "current", out var current);
@@ -812,7 +941,7 @@ public static class Program
 
         if (TryGetObj(state, "empire", out var empire))
         {
-            fields.Add(BuildEmpireSummaryField(empire));
+            fields.Add(BuildEmpireSummaryField(empire, prevEmpire));
         }
 
         return MakeEmbed(
@@ -822,7 +951,7 @@ public static class Program
             fields);
     }
 
-    private static JsonObject BuildEmpireSummaryField(JsonElement empire)
+    private static JsonObject BuildEmpireSummaryField(JsonElement empire, (int RawTotal, int RefTotal, string WindowLabel)? prevEmpire = null)
     {
         TryGetObj(empire, "activity", out var act);
         long refined = GetLong(act, "refinedTotal");
@@ -830,11 +959,17 @@ public static class Program
         long produced = GetLong(act, "outpostProducedTotal");
 
         int rawTotal = GetInt(empire, "rawBacklogTotal");
-        int rawDelta = GetInt(empire, "rawBacklogDelta");
+        int rawDelta = prevEmpire.HasValue
+            ? rawTotal - prevEmpire.Value.RawTotal
+            : GetInt(empire, "rawBacklogDelta");
         string rawTrend = rawDelta > 0 ? "GROWING" : (rawDelta < 0 ? "DRAINING" : "STEADY");
 
         int refTotal = GetInt(empire, "refinedStockTotal");
-        int refDelta = GetInt(empire, "refinedStockDelta");
+        int refDelta = prevEmpire.HasValue
+            ? refTotal - prevEmpire.Value.RefTotal
+            : GetInt(empire, "refinedStockDelta");
+
+        string scopeSuffix = prevEmpire.HasValue ? $" {prevEmpire.Value.WindowLabel}" : "";
 
         int fullOutposts = 0;
         int totalOutposts = 0;
@@ -851,7 +986,7 @@ public static class Program
         return MakeField(
             "Empire & Refining",
             $"Refined: **{FmtNum(refined)}** | Trade Profit: `{FmtSigned(tradeProfit)}` | Produced: **{FmtNum(produced)}**{opWarn}\n" +
-            $"Raw Backlog: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`, {rawTrend}) | Refined Stock: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`)",
+            $"Raw Backlog: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`{scopeSuffix}, {rawTrend}) | Refined Stock: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`{scopeSuffix})",
             false);
     }
 
@@ -888,11 +1023,20 @@ public static class Program
             fields.Add(MakeField($"Outpost Storage ({outposts.GetArrayLength()})", string.Join("\n", lines), false));
         }
 
+        int winMins = GetInt(empire, "backlogWindowMinutes");
+        string winLabel = winMins >= 60 ? "last 1h" : $"last {winMins}m";
+
         int rawTotal = GetInt(empire, "rawBacklogTotal");
         int rawDelta = GetInt(empire, "rawBacklogDelta");
         double rawRate = GetDbl(empire, "rawBacklogRatePerHour");
-        string rawTrend = rawDelta > 0 ? "GROWING" : (rawDelta < 0 ? "DRAINING" : "STEADY");
-        var rawLines = new List<string> { $"Total: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`, {rawRate:+0.0;-0.0;0.0}/hr — **{rawTrend}**)" };
+        int rawWinDelta = GetInt(empire, "rawBacklogWindowDelta");
+        double rawWinRate = GetDbl(empire, "rawBacklogWindowRatePerHour");
+        int rawTrendDelta = winMins > 0 ? rawWinDelta : rawDelta;
+        string rawTrend = rawTrendDelta > 0 ? "GROWING" : (rawTrendDelta < 0 ? "DRAINING" : "STEADY");
+        string rawHeader = winMins > 0
+            ? $"Total: **{FmtNum(rawTotal)}** (`{FmtSigned(rawWinDelta)}` {winLabel}, {rawWinRate:+0.0;-0.0;0.0}/hr — **{rawTrend}** | session `{FmtSigned(rawDelta)}`)"
+            : $"Total: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`, {rawRate:+0.0;-0.0;0.0}/hr — **{rawTrend}**)";
+        var rawLines = new List<string> { rawHeader };
         if (TryGetArr(empire, "rawBacklogItems", out var rawItems))
         {
             int n = 0;
@@ -907,7 +1051,12 @@ public static class Program
         int refTotal = GetInt(empire, "refinedStockTotal");
         int refDelta = GetInt(empire, "refinedStockDelta");
         double refRate = GetDbl(empire, "refinedStockRatePerHour");
-        var refLines = new List<string> { $"Total: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`, {refRate:+0.0;-0.0;0.0}/hr)" };
+        int refWinDelta = GetInt(empire, "refinedStockWindowDelta");
+        double refWinRate = GetDbl(empire, "refinedStockWindowRatePerHour");
+        string refHeader = winMins > 0
+            ? $"Total: **{FmtNum(refTotal)}** (`{FmtSigned(refWinDelta)}` {winLabel}, {refWinRate:+0.0;-0.0;0.0}/hr | session `{FmtSigned(refDelta)}`)"
+            : $"Total: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`, {refRate:+0.0;-0.0;0.0}/hr)";
+        var refLines = new List<string> { refHeader };
         if (TryGetArr(empire, "refinedStockItems", out var refItems))
         {
             int n = 0;
@@ -924,6 +1073,208 @@ public static class Program
             : "No active supply depot configured.";
 
         return MakeEmbed("Empire & Refining Overview", depotDesc, 0x38BDF8, fields);
+    }
+
+    private static JsonObject BuildDepotEmbed(JsonElement root, string? location, string filter, string? search, string sort)
+    {
+        if (!GetBool(root, "inGame"))
+            return MakeEmbed("Station & Depot Inventory", "Not currently in game.", 0x64748B);
+
+        if (!TryGetArr(root, "stations", out var stationsEl) || stationsEl.GetArrayLength() == 0)
+            return MakeEmbed("Station & Depot Inventory", "No stations with stored materials found.", 0x38BDF8);
+
+        var allStations = new List<JsonElement>();
+        foreach (var st in stationsEl.EnumerateArray())
+            allStations.Add(st);
+
+        // Filter by location (station name, system name, or sector name)
+        var matched = allStations;
+        if (!string.IsNullOrEmpty(location))
+        {
+            matched = allStations.Where(st =>
+                (GetStr(st, "name") ?? "").Contains(location, StringComparison.OrdinalIgnoreCase) ||
+                (GetStr(st, "systemName") ?? "").Contains(location, StringComparison.OrdinalIgnoreCase) ||
+                (GetStr(st, "sectorName") ?? "").Contains(location, StringComparison.OrdinalIgnoreCase)
+            ).ToList();
+
+            if (matched.Count == 0)
+            {
+                var names = string.Join(", ", allStations.Take(10).Select(st => $"`{GetStr(st, "name")}`"));
+                return MakeEmbed(
+                    "Station & Depot Inventory",
+                    $"No station, system, or sector matched **`{location}`**.\nAvailable stations: {names}",
+                    0xF59E0B);
+            }
+        }
+
+        string filterLabel = filter switch
+        {
+            "raw" => "Raw (Ores/Crystals/Salvage)",
+            "refined" => "Refined",
+            "other" => "Other",
+            _ => "All"
+        };
+
+        List<JsonElement> FilterAndSortItems(JsonElement st)
+        {
+            var list = new List<JsonElement>();
+            if (!TryGetArr(st, "items", out var itemsEl)) return list;
+            foreach (var it in itemsEl.EnumerateArray())
+            {
+                string grp = GetStr(it, "group") ?? "other";
+                if (filter != "all" && !grp.Equals(filter, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!string.IsNullOrEmpty(search))
+                {
+                    string name = GetStr(it, "name") ?? "";
+                    if (!name.Contains(search, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                }
+                list.Add(it);
+            }
+
+            if (sort == "volume")
+                list.Sort((a, b) => GetDbl(b, "spaceM3").CompareTo(GetDbl(a, "spaceM3")));
+            else if (sort == "name")
+                list.Sort((a, b) => string.Compare(GetStr(a, "name"), GetStr(b, "name"), StringComparison.OrdinalIgnoreCase));
+            else
+                list.Sort((a, b) => GetInt(b, "count").CompareTo(GetInt(a, "count")));
+
+            return list;
+        }
+
+        static string StationTags(JsonElement st)
+        {
+            var tags = new List<string>();
+            if (GetBool(st, "isHomeStation")) tags.Add("Home");
+            if (GetBool(st, "isActiveDepot")) tags.Add("Depot");
+            if (GetBool(st, "isPlayerOutpost")) tags.Add("Outpost");
+            return tags.Count > 0 ? $" [{string.Join("/", tags)}]" : "";
+        }
+
+        // Case 1: Overview mode (no location and no search, and > 1 station)
+        if (string.IsNullOrEmpty(location) && string.IsNullOrEmpty(search) && matched.Count > 1)
+        {
+            var lines = new List<string>();
+            int shown = 0;
+            foreach (var st in matched)
+            {
+                int countForFilter = filter switch
+                {
+                    "raw" => GetInt(st, "rawCount"),
+                    "refined" => GetInt(st, "refinedCount"),
+                    "other" => GetInt(st, "otherCount"),
+                    _ => GetInt(st, "totalItemCount")
+                };
+                if (filter != "all" && countForFilter == 0) continue;
+
+                string name = GetStr(st, "name") ?? "Station";
+                string sys = GetStr(st, "systemName") ?? "";
+                string sec = GetStr(st, "sectorName") ?? "";
+                string loc = !string.IsNullOrEmpty(sys) && !string.IsNullOrEmpty(sec) ? $"{sys} ({sec})" : (!string.IsNullOrEmpty(sec) ? sec : sys);
+                double fillPct = GetDbl(st, "fillPct");
+                long used = (long)GetDbl(st, "spaceUsed");
+                long cap = (long)GetDbl(st, "capacity");
+
+                string breakdown = filter == "all"
+                    ? $"Raw: {FmtNum(GetInt(st, "rawCount"))} • Ref: {FmtNum(GetInt(st, "refinedCount"))} • Other: {FmtNum(GetInt(st, "otherCount"))}"
+                    : $"{filterLabel}: **{FmtNum(countForFilter)}**";
+
+                lines.Add($"• **{name}**{StationTags(st)} — {loc}\n  {fillPct:0.0}% ({FmtNum(used)}/{FmtNum(cap)} m³) • {breakdown}");
+                shown++;
+                if (shown >= 15) break;
+            }
+
+            if (lines.Count == 0)
+                return MakeEmbed($"Station & Depot Inventory ({filterLabel})", $"No stations have items matching filter **{filterLabel}**.", 0x38BDF8);
+
+            if (matched.Count > shown)
+                lines.Add($"*…and {matched.Count - shown} more stations. Use `/depot location:<name>` to inspect.*");
+
+            lines.Add("\n*Tip: `/depot location:<name> filter:raw|refined|other` or `/depot search:<item>`*");
+            return MakeEmbed($"Stations & Depots ({shown} shown • {filterLabel})", string.Join("\n", lines), 0x38BDF8);
+        }
+
+        // Case 2: Detailed station view (single station or filtered/searched stations)
+        var fields = new JsonArray();
+        int stationsWithHits = 0;
+        long grandTotal = 0;
+        int maxStations = matched.Count == 1 ? 1 : 6;
+        int maxItemsPerStation = matched.Count == 1 ? 22 : 8;
+
+        foreach (var st in matched)
+        {
+            var items = FilterAndSortItems(st);
+            if (!string.IsNullOrEmpty(search) && items.Count == 0)
+                continue;
+
+            stationsWithHits++;
+            if (fields.Count >= maxStations) continue;
+
+            string name = GetStr(st, "name") ?? "Station";
+            string sys = GetStr(st, "systemName") ?? "";
+            string sec = GetStr(st, "sectorName") ?? "";
+            string loc = !string.IsNullOrEmpty(sys) && !string.IsNullOrEmpty(sec) ? $"{sys} / {sec}" : (!string.IsNullOrEmpty(sec) ? sec : sys);
+            double fillPct = GetDbl(st, "fillPct");
+            long used = (long)GetDbl(st, "spaceUsed");
+            long cap = (long)GetDbl(st, "capacity");
+
+            string fieldTitle = $"{name}{StationTags(st)} — {fillPct:0.0}% ({FmtNum(used)}/{FmtNum(cap)} m³)";
+            if (!string.IsNullOrEmpty(loc))
+                fieldTitle = $"{name}{StationTags(st)} ({loc}) — {fillPct:0.0}%";
+
+            if (items.Count == 0)
+            {
+                fields.Add(MakeField(fieldTitle, $"No items matching **{filterLabel}**.", false));
+                continue;
+            }
+
+            var itemLines = new List<string>();
+            int totalUnits = 0;
+            foreach (var it in items) totalUnits += GetInt(it, "count");
+            grandTotal += totalUnits;
+
+            foreach (var it in items.Take(maxItemsPerStation))
+            {
+                string itName = GetStr(it, "name") ?? "Unknown";
+                int cnt = GetInt(it, "count");
+                double m3 = GetDbl(it, "spaceM3");
+                string grpTag = filter == "all" ? $" `[{GetStr(it, "group")}]`" : "";
+                string line = sort == "volume"
+                    ? $"• **{itName}**: {FmtNum(cnt)} ({m3:0.#} m³){grpTag}"
+                    : $"• **{itName}**: {FmtNum(cnt)}{grpTag}";
+                if (itemLines.Sum(l => l.Length + 1) + line.Length > 960)
+                    break;
+                itemLines.Add(line);
+            }
+
+            if (items.Count > itemLines.Count)
+                itemLines.Add($"*…+{items.Count - itemLines.Count} more ({FmtNum(totalUnits)} total units)*");
+
+            fields.Add(MakeField(fieldTitle, string.Join("\n", itemLines), false));
+        }
+
+        if (fields.Count == 0)
+        {
+            return MakeEmbed(
+                "Station & Depot Inventory",
+                $"No items found matching{(search != null ? $" **`{search}`**" : "")} ({filterLabel}).",
+                0xF59E0B);
+        }
+
+        string title = !string.IsNullOrEmpty(search)
+            ? $"Depot Search: \"{search}\" ({filterLabel})"
+            : (matched.Count == 1
+                ? $"{GetStr(matched[0], "name")}{StationTags(matched[0])} ({filterLabel})"
+                : $"Stations matching \"{location}\" ({filterLabel})");
+
+        string desc = !string.IsNullOrEmpty(search)
+            ? $"Found across **{stationsWithHits}** station(s) — **{FmtNum(grandTotal)}** total units."
+            : (matched.Count == 1
+                ? $"Storage: **{GetDbl(matched[0], "fillPct"):0.0}%** ({FmtNum((long)GetDbl(matched[0], "spaceUsed"))} / {FmtNum((long)GetDbl(matched[0], "capacity"))} m³) • Sort: `{sort}`"
+                : $"Showing {fields.Count} of {stationsWithHits} matching station(s) • Sort: `{sort}`");
+
+        return MakeEmbed(title, desc, 0x38BDF8, fields);
     }
 
     private static JsonObject MakeEmbed(string title, string? description, int color, JsonArray? fields = null)

@@ -10,6 +10,7 @@ Planned features and milestone history spanning the in-game **EchoMonitor** BepI
 - **Milestone 2 (Complete)** ✅ Stuck ECHO Detection (Destroyed/Hostile Station dock loop + same-mission/POI Emergency Warp loop) + Web UI Recovery Controls (Warp to Safe Station, Abandon Active Mission, Reset/Toggle ECHO) + Running Mission Log.
 - **Milestone 3 (Complete)** ✅ Empire Raid & Siege Detection + Warp to Defend + Standalone .NET 8 Discord Companion Bot (`EchoMonitorBot.exe`) with interactive alert buttons, slash commands, crash vs. clean-exit detection, and `AutoLaunchBot`.
 - **Milestone 4 (Implemented)** ✅ Empire Activity, Outpost Storage & Refining Monitoring — ≥ 95% outpost storage alerts (with 90% hysteresis), one-click `Move Half Largest Stack → Depot` relief (`POST /api/action/relieve-outpost` + Web UI & Discord buttons), Harmony-hooked session refining/trade/production counters, depot raw/salvage backlog & refined product stockpile tracking, **Empire & Refining** Web UI tab, and `/empire` Discord command.
+- **Milestone 8 (Implemented)** ✅ Outpost Job Status — Real-time outpost operational state (`Working`, `Idle`, `Upgrading`, `MissingMaterials`, `StorageFull`, `Unset`, `Raided`) and active job tracking (Production, Forge, Refinery, Construction, Upgrade) with progress, remaining counts, ETA, and stalled/paused/awaiting-supplies indicators in the **Empire & Refining** Web UI tab and `/empire` Discord command.
 
 ---
 
@@ -30,11 +31,6 @@ Planned features and milestone history spanning the in-game **EchoMonitor** BepI
 - **Criteria Examples:**
   - *Wishlist / Fleet Goal:* `item matches ["Microcell Swarm", "Hailfire", "Missile Launcher"] AND rarity >= Exotic AND iLvl >= 90` (e.g., *Exotic Microcell Swarm Mk.XX, iLvl 93, Punch Through*).
   - *Workshop Reroll-Aware Substats ("N of M"):* Match items with at least `N` desired substats (e.g., `>= 2 of [Turret Rotation Speed, Critical Damage, Energy Damage, Reload Speed]`), so 2-of-3 rolls with one dead substat (like Torpedo Power) that are one Workshop reroll away from a god-roll still get auto-favorited.
-
----
-
-### Milestone 8 (Planned) ⏳ — Outpost Job Status
-- Show the current job status of outposts (active jobs, progress, and idle/stalled states) in the Web UI and Discord companion.
 
 ---
 

@@ -14,7 +14,9 @@ using Source.Galaxy;
 using Source.Galaxy.POI;
 using Source.Galaxy.Trade;
 using Source.Item;
+using Source.Mining;
 using Source.MissionSystem;
+using Source.Spacestation;
 using Source.Player;
 using Source.SpaceShip;
 using Source.Util;
@@ -71,6 +73,131 @@ namespace EchoMonitor
             };
         }
 
+        private static List<OutpostJobInfo> CollectOutpostJobs(PlayerStation st)
+        {
+            var list = new List<OutpostJobInfo>();
+            if (st == null) return list;
+
+            try
+            {
+                if (st.isUpgrading)
+                {
+                    double dur = st.upgradeDuration;
+                    double pct = dur > 0.0 ? Math.Round(Math.Max(0.0, Math.Min(100.0, (st.upgradeTimer / dur) * 100.0)), 1) : 0.0;
+                    bool awaiting = !string.IsNullOrEmpty(st.guid) && SupplyNetwork.IsAwaitingSupplies(st.guid);
+                    double rem = awaiting || dur <= 0.0 ? -1.0 : Math.Round(Math.Max(0.0, dur - st.upgradeTimer), 1);
+                    list.Add(new OutpostJobInfo
+                    {
+                        JobType = "Upgrade",
+                        Name = $"Upgrade to Tier {st.tier + 1}",
+                        ProgressPct = pct,
+                        InitialAmount = 1,
+                        RemainingAmount = 1,
+                        AwaitingSupplies = awaiting,
+                        TimeRemainingSec = rem
+                    });
+                }
+
+                foreach (var job in st.GetJobs())
+                {
+                    if (job == null) continue;
+                    double pct = Math.Round(Math.Max(0.0, Math.Min(100.0, job.jobProgress * 100.0)), 1);
+
+                    if (job is TradeGoodProductionJob prod)
+                    {
+                        list.Add(new OutpostJobInfo
+                        {
+                            JobType = "Production",
+                            Name = TranslateIfNeeded(prod.jobName),
+                            ProgressPct = pct,
+                            InitialAmount = prod.initialAmount,
+                            RemainingAmount = prod.remainingAmount,
+                            Repeat = true,
+                            Stalled = prod.stalled,
+                            TimeRemainingSec = prod.stalled ? -1.0 : Math.Round(Math.Max(0.0, prod.timeUntilNextCycle), 1)
+                        });
+                    }
+                    else if (job is ForgeJob fj)
+                    {
+                        bool waiting = fj.isWaiting || fj.isAwaitingSupplies;
+                        double rem = waiting || fj.craftingTime <= 0f
+                            ? -1.0
+                            : Math.Round(Math.Max(0.0, (1f - fj.jobProgress) * fj.craftingTime), 1);
+                        list.Add(new OutpostJobInfo
+                        {
+                            JobType = "Forge",
+                            Name = TranslateIfNeeded(fj.jobName),
+                            ProgressPct = pct,
+                            InitialAmount = fj.initialAmount,
+                            RemainingAmount = fj.remainingAmount,
+                            Repeat = fj.repeat,
+                            Stalled = fj.stalled,
+                            Paused = fj.paused,
+                            AwaitingSupplies = fj.isAwaitingSupplies,
+                            TimeRemainingSec = rem
+                        });
+                    }
+                    else if (job is RefineryJob rj)
+                    {
+                        bool waiting = rj.stalled || rj.isAwaitingSupplies;
+                        double rem = waiting || rj.refineTime <= 0f
+                            ? -1.0
+                            : Math.Round(Math.Max(0.0, (1f - rj.jobProgress) * rj.refineTime), 1);
+                        list.Add(new OutpostJobInfo
+                        {
+                            JobType = "Refinery",
+                            Name = TranslateIfNeeded(rj.jobName),
+                            ProgressPct = pct,
+                            InitialAmount = rj.initialAmount,
+                            RemainingAmount = rj.remainingAmount,
+                            Stalled = rj.stalled,
+                            AwaitingSupplies = rj.isAwaitingSupplies,
+                            TimeRemainingSec = rem
+                        });
+                    }
+                    else if (job is ConstructionYardJob cj)
+                    {
+                        bool awaiting = !string.IsNullOrEmpty(cj.supplyKey) && SupplyNetwork.IsAwaitingSupplies(cj.supplyKey);
+                        double cPct = cj.totalDuration > 0f
+                            ? Math.Round(Math.Max(0.0, Math.Min(100.0, (cj.elapsed / cj.totalDuration) * 100.0)), 1)
+                            : pct;
+                        double rem = cj.isQueued || awaiting || cj.totalDuration <= 0f
+                            ? -1.0
+                            : Math.Round(Math.Max(0.0, cj.totalDuration - cj.elapsed), 1);
+                        list.Add(new OutpostJobInfo
+                        {
+                            JobType = "Construction",
+                            Name = TranslateIfNeeded(cj.shipName),
+                            ProgressPct = cPct,
+                            InitialAmount = 1,
+                            RemainingAmount = 1,
+                            AwaitingSupplies = awaiting,
+                            TimeRemainingSec = rem
+                        });
+                    }
+                    else
+                    {
+                        string jType = job.GetType().Name.Replace("Job", "");
+                        list.Add(new OutpostJobInfo
+                        {
+                            JobType = string.IsNullOrEmpty(jType) ? "Job" : jType,
+                            Name = TranslateIfNeeded(job.jobName),
+                            ProgressPct = pct,
+                            InitialAmount = job.initialAmount,
+                            RemainingAmount = job.remainingAmount,
+                            TimeRemainingSec = -1.0
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"CollectOutpostJobs error for {st.name}: {ex.Message}");
+            }
+
+            return list;
+        }
+
         private static EmpireStatus CollectEmpireStatus(GamePlayer gp, PlayerSnapshot snapshot)
         {
             var status = new EmpireStatus();
@@ -112,6 +239,19 @@ namespace EchoMonitor
                         }
                     }
 
+                    var stationState = PlayerStationStatus.Get(st);
+                    var jobs = CollectOutpostJobs(st);
+                    bool hasStalled = PlayerStationStatus.HasStalledRepeatingJob(st)
+                        || stationState == PlayerStationState.MissingMaterials
+                        || stationState == PlayerStationState.StorageFull
+                        || stationState == PlayerStationState.Raided;
+                    int activeJobs = 0;
+                    for (int ji = 0; ji < jobs.Count; ji++)
+                    {
+                        if (jobs[ji].Stalled) hasStalled = true;
+                        if (!jobs[ji].Stalled && !jobs[ji].Paused) activeJobs++;
+                    }
+
                     status.Outposts.Add(new OutpostStorageInfo
                     {
                         StationGuid = st.guid ?? string.Empty,
@@ -127,7 +267,11 @@ namespace EchoMonitor
                         LargestStackItemId = largestId,
                         LargestStackItemName = largestName,
                         LargestStackCount = largestCount,
-                        LargestStackM3 = largestM3
+                        LargestStackM3 = largestM3,
+                        State = stationState.ToString(),
+                        HasStalledJob = hasStalled,
+                        ActiveJobCount = activeJobs,
+                        Jobs = jobs
                     });
                 }
 
@@ -197,6 +341,176 @@ namespace EchoMonitor
             }
 
             return status;
+        }
+
+        public static DepotInventoryResponse CollectStationInventories()
+        {
+            var resp = new DepotInventoryResponse();
+            var gp = GamePlayer.current;
+            if (gp == null)
+            {
+                resp.InGame = false;
+                return resp;
+            }
+
+            resp.InGame = true;
+
+            try
+            {
+                var activeDepots = new HashSet<SpaceStation>();
+                if (GalaxyMapData.current != null)
+                {
+                    foreach (var sector in GalaxyMapData.current.allSectors)
+                    {
+                        if (sector == null) continue;
+                        var dep = SupplyNetwork.GetActiveDepot(sector) ?? SupplyNetwork.GetDepot(sector);
+                        if (dep != null && dep.materialStorage != null)
+                        {
+                            activeDepots.Add(dep);
+                        }
+                    }
+                }
+
+                var seen = new HashSet<SpaceStation>();
+                var candidates = new List<SpaceStation>();
+
+                void AddCandidate(SpaceStation ss)
+                {
+                    if (ss != null && ss.materialStorage != null && seen.Add(ss))
+                    {
+                        candidates.Add(ss);
+                    }
+                }
+
+                if (gp.homeStation != null) AddCandidate(gp.homeStation);
+                foreach (var dep in activeDepots) AddCandidate(dep);
+                foreach (var ps in PlayerStation.GetAllOwned()) AddCandidate(ps);
+
+                if (GalaxyMapData.current != null)
+                {
+                    foreach (var sys in GalaxyMapData.current.allSystems)
+                    {
+                        if (sys?.pointsOfInterest == null) continue;
+                        foreach (var poi in sys.pointsOfInterest)
+                        {
+                            if (poi is SpaceStation ss)
+                            {
+                                AddCandidate(ss);
+                            }
+                        }
+                    }
+                }
+
+                foreach (var ss in candidates)
+                {
+                    bool isActiveDepot = activeDepots.Contains(ss);
+                    bool isHome = gp.homeStation == ss;
+                    bool isOutpost = ss is PlayerStation;
+
+                    var byItemId = new Dictionary<string, StationInventoryItem>(StringComparer.Ordinal);
+                    int totalCount = 0;
+                    int rawCount = 0;
+                    int refinedCount = 0;
+                    int otherCount = 0;
+
+                    if (ss.materialStorage.items != null)
+                    {
+                        foreach (var entry in ss.materialStorage.items)
+                        {
+                            if (entry == null || entry.item == null || entry.count <= 0) continue;
+                            var cat = entry.item.itemCategory;
+                            string group = (cat == ItemCategory.Ore || cat == ItemCategory.Salvage || cat == ItemCategory.Crystal)
+                                ? "raw"
+                                : (cat == ItemCategory.RefinedProduct ? "refined" : "other");
+
+                            string itemId = entry.item.identifier ?? string.Empty;
+                            string itemName = TranslateIfNeeded(!string.IsNullOrEmpty(entry.item.displayName)
+                                ? entry.item.displayName
+                                : itemId);
+                            string key = !string.IsNullOrEmpty(itemId) ? itemId : itemName;
+
+                            if (!byItemId.TryGetValue(key, out var itemInfo))
+                            {
+                                itemInfo = new StationInventoryItem
+                                {
+                                    ItemId = itemId,
+                                    Name = itemName,
+                                    Group = group,
+                                    Category = cat.ToString(),
+                                    Count = 0,
+                                    SpaceM3 = 0.0
+                                };
+                                byItemId[key] = itemInfo;
+                            }
+
+                            itemInfo.Count += entry.count;
+                            itemInfo.SpaceM3 = Math.Round(itemInfo.SpaceM3 + entry.spaceRequired, 2);
+
+                            totalCount += entry.count;
+                            if (group == "raw") rawCount += entry.count;
+                            else if (group == "refined") refinedCount += entry.count;
+                            else otherCount += entry.count;
+                        }
+                    }
+
+                    // Skip empty NPC stations that aren't depots, home station, or player outposts
+                    if (byItemId.Count == 0 && !isActiveDepot && !isHome && !isOutpost)
+                    {
+                        continue;
+                    }
+
+                    var items = new List<StationInventoryItem>(byItemId.Values);
+                    items.Sort((a, b) =>
+                    {
+                        int cmp = b.Count.CompareTo(a.Count);
+                        return cmp != 0 ? cmp : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                    });
+
+                    double used = ss.materialStorage.spaceUsed;
+                    double cap = ss.materialStorage.capacity;
+                    double fillPct = cap > 0 ? Math.Round((used / cap) * 100.0, 1) : 0.0;
+
+                    resp.Stations.Add(new StationInventoryInfo
+                    {
+                        StationGuid = ss.guid ?? string.Empty,
+                        Name = TranslateIfNeeded(ss.name),
+                        SystemName = TranslateIfNeeded(ss.system?.name),
+                        SectorName = TranslateIfNeeded(ss.system?.sector?.name),
+                        IsActiveDepot = isActiveDepot,
+                        IsHomeStation = isHome,
+                        IsPlayerOutpost = isOutpost,
+                        SpaceUsed = Math.Round(used, 1),
+                        Capacity = Math.Round(cap, 1),
+                        FillPct = fillPct,
+                        TotalItemCount = totalCount,
+                        RawCount = rawCount,
+                        RefinedCount = refinedCount,
+                        OtherCount = otherCount,
+                        Items = items
+                    });
+                }
+
+                resp.Stations.Sort((a, b) =>
+                {
+                    int cmp = b.IsHomeStation.CompareTo(a.IsHomeStation);
+                    if (cmp != 0) return cmp;
+                    cmp = b.IsActiveDepot.CompareTo(a.IsActiveDepot);
+                    if (cmp != 0) return cmp;
+                    cmp = b.IsPlayerOutpost.CompareTo(a.IsPlayerOutpost);
+                    if (cmp != 0) return cmp;
+                    cmp = b.SpaceUsed.CompareTo(a.SpaceUsed);
+                    if (cmp != 0) return cmp;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+
+                resp.StationCount = resp.Stations.Count;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"CollectStationInventories error: {ex.Message}");
+            }
+
+            return resp;
         }
 
         private static string TranslateIfNeeded(string value)
@@ -649,11 +963,18 @@ namespace EchoMonitor
                             string name = TranslateIfNeeded(item.displayName ?? item.identifier ?? "Unknown");
                             string rarity = item.rarity.ToString();
                             int ilvl = item.itemLevel;
-                            string eqType = item.equipmentDefinition.name ?? string.Empty;
+                            string eqType = TranslateIfNeeded(item.equipmentDefinition.typeDisplayName);
+                            if (string.IsNullOrEmpty(eqType))
+                                eqType = TranslateIfNeeded("@EquipSlot" + item.equipmentDefinition.slot);
+                            if (string.IsNullOrEmpty(eqType))
+                                eqType = item.equipmentDefinition.name ?? string.Empty;
+                            string size = TranslateIfNeeded(item.equipmentDefinition.size.GetDisplayName());
+                            if (string.IsNullOrEmpty(size))
+                                size = item.equipmentDefinition.size.ToString();
 
                             ExtractModuleDetails(item, out var substats, out var aspects);
                             string sig = ComputeModuleSignature(substats, aspects);
-                            string key = $"{name}{SessionManager.KeySep}{rarity}{SessionManager.KeySep}{ilvl}{SessionManager.KeySep}{eqType}{SessionManager.KeySep}{sig}";
+                            string key = $"{name}{SessionManager.KeySep}{rarity}{SessionManager.KeySep}{ilvl}{SessionManager.KeySep}{eqType}{SessionManager.KeySep}{size}{SessionManager.KeySep}{sig}";
 
                             snap.Modules[key] = snap.Modules.TryGetValue(key, out int prev) ? prev + slot.count : slot.count;
                             if (!snap.ModuleSubstats.ContainsKey(key))

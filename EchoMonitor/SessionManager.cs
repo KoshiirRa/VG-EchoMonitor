@@ -31,10 +31,27 @@ namespace EchoMonitor
         private readonly string _rootDir;
         private readonly object _lock = new object();
 
+        private readonly struct BacklogSample
+        {
+            public readonly DateTime TimestampUtc;
+            public readonly int RawTotal;
+            public readonly int RefTotal;
+
+            public BacklogSample(DateTime timestampUtc, int rawTotal, int refTotal)
+            {
+                TimestampUtc = timestampUtc;
+                RawTotal = rawTotal;
+                RefTotal = refTotal;
+            }
+        }
+
+        private const double RollingBacklogWindowMinutes = 60.0;
+
         private string _activeSaveId;
         private PlayerSnapshot _baseline;
         private readonly List<HistoryEntry> _history = new List<HistoryEntry>();
         private readonly List<MissionLogEntry> _missionLog = new List<MissionLogEntry>();
+        private readonly List<BacklogSample> _backlogSamples = new List<BacklogSample>();
         private EmpireActivityDelta _empireActivity = new EmpireActivityDelta();
         private DateTime _lastHistoryWriteUtc = DateTime.MinValue;
 
@@ -269,6 +286,48 @@ namespace EchoMonitor
             empire.RefinedStockRatePerHour = safeHours > 0 ? Math.Round(empire.RefinedStockDelta / safeHours, 1) : 0.0;
             empire.RefinedStockItems = refItems;
 
+            // Rolling 60-minute backlog & refined stock trend
+            DateTime nowUtc = DateTime.UtcNow;
+            if (_backlogSamples.Count == 0 || (nowUtc - _backlogSamples[_backlogSamples.Count - 1].TimestampUtc).TotalSeconds >= 60.0)
+            {
+                _backlogSamples.Add(new BacklogSample(nowUtc, rawTotal, refTotal));
+            }
+
+            // Keep the newest sample at or older than the 60m boundary, pruning anything earlier
+            int dropCount = 0;
+            while (_backlogSamples.Count - dropCount > 1 &&
+                   (nowUtc - _backlogSamples[dropCount + 1].TimestampUtc).TotalMinutes >= RollingBacklogWindowMinutes)
+            {
+                dropCount++;
+            }
+            if (dropCount > 0)
+            {
+                _backlogSamples.RemoveRange(0, dropCount);
+            }
+
+            if (_backlogSamples.Count > 0)
+            {
+                var refSample = _backlogSamples[0];
+                double elapsedMin = (nowUtc - refSample.TimestampUtc).TotalMinutes;
+                if (elapsedMin >= 1.0)
+                {
+                    double elapsedHours = elapsedMin / 60.0;
+                    empire.BacklogWindowMinutes = Math.Max(1, (int)Math.Round(Math.Min(elapsedMin, RollingBacklogWindowMinutes)));
+                    empire.RawBacklogWindowDelta = rawTotal - refSample.RawTotal;
+                    empire.RawBacklogWindowRatePerHour = Math.Round(empire.RawBacklogWindowDelta / elapsedHours, 1);
+                    empire.RefinedStockWindowDelta = refTotal - refSample.RefTotal;
+                    empire.RefinedStockWindowRatePerHour = Math.Round(empire.RefinedStockWindowDelta / elapsedHours, 1);
+                }
+                else
+                {
+                    empire.BacklogWindowMinutes = 0;
+                    empire.RawBacklogWindowDelta = 0;
+                    empire.RawBacklogWindowRatePerHour = 0.0;
+                    empire.RefinedStockWindowDelta = 0;
+                    empire.RefinedStockWindowRatePerHour = 0.0;
+                }
+            }
+
             // Snapshot of session empire activity
             empire.Activity = new EmpireActivityDelta
             {
@@ -348,6 +407,7 @@ namespace EchoMonitor
                 _activeSaveId = SanitizeSaveId(current.SaveId);
                 _baseline = current;
                 _history.Clear();
+                _backlogSamples.Clear();
                 _missionLog.Clear();
                 _empireActivity = new EmpireActivityDelta();
 

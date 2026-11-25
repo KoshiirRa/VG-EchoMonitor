@@ -12,7 +12,8 @@ public sealed record DiscordInteraction(
     int Type,
     string? CommandName,
     string? CustomId,
-    string? UserId);
+    string? UserId,
+    IReadOnlyDictionary<string, string> Options);
 
 public sealed class DiscordGateway : IDisposable
 {
@@ -205,12 +206,27 @@ public sealed class DiscordGateway : IDisposable
 
             string? cmdName = null;
             string? customId = null;
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (data.TryGetProperty("data", out var idata) && idata.ValueKind == JsonValueKind.Object)
             {
                 if (idata.TryGetProperty("name", out var nEl) && nEl.ValueKind == JsonValueKind.String)
                     cmdName = nEl.GetString();
                 if (idata.TryGetProperty("custom_id", out var cEl) && cEl.ValueKind == JsonValueKind.String)
                     customId = cEl.GetString();
+                if (idata.TryGetProperty("options", out var optsEl) && optsEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var opt in optsEl.EnumerateArray())
+                    {
+                        if (opt.TryGetProperty("name", out var on) && on.ValueKind == JsonValueKind.String &&
+                            opt.TryGetProperty("value", out var ov))
+                        {
+                            string? key = on.GetString();
+                            string val = ov.ValueKind == JsonValueKind.String ? (ov.GetString() ?? string.Empty) : ov.ToString();
+                            if (!string.IsNullOrEmpty(key))
+                                options[key] = val;
+                        }
+                    }
+                }
             }
 
             string? userId = null;
@@ -219,7 +235,7 @@ public sealed class DiscordGateway : IDisposable
             else if (data.TryGetProperty("user", out var du) && du.TryGetProperty("id", out var duid))
                 userId = duid.GetString();
 
-            var interaction = new DiscordInteraction(id, token, type, cmdName, customId, userId);
+            var interaction = new DiscordInteraction(id, token, type, cmdName, customId, userId, options);
             if (OnInteraction != null)
             {
                 _ = Task.Run(async () =>
@@ -305,6 +321,7 @@ public sealed class DiscordGateway : IDisposable
             MakeCommand("loot", "Show session modules by rarity, locked crates, and ready ship BPs."),
             MakeCommand("missions", "Show the last 10 entries from the EchoMonitor mission log."),
             MakeCommand("empire", "Show outpost storage, refining output, depot backlog, and refined products."),
+            MakeDepotCommand(),
             MakeCommand("recover", "Open an ephemeral recovery control panel."),
             MakeCommand("reset_session", "Reset the EchoMonitor session baseline (allowed users only).")
         };
@@ -322,6 +339,57 @@ public sealed class DiscordGateway : IDisposable
         ["name"] = name,
         ["type"] = 1,
         ["description"] = description
+    };
+
+    private static JsonObject MakeDepotCommand() => new()
+    {
+        ["name"] = "depot",
+        ["type"] = 1,
+        ["description"] = "View station/depot inventory by location, with optional raw/refined/search filters.",
+        ["options"] = new JsonArray
+        {
+            new JsonObject
+            {
+                ["name"] = "location",
+                ["description"] = "Station, system, or sector name (omit to list all stations with storage)",
+                ["type"] = 3,
+                ["required"] = false
+            },
+            new JsonObject
+            {
+                ["name"] = "filter",
+                ["description"] = "Filter by item category (raw includes ores, crystals & salvage)",
+                ["type"] = 3,
+                ["required"] = false,
+                ["choices"] = new JsonArray
+                {
+                    new JsonObject { ["name"] = "All", ["value"] = "all" },
+                    new JsonObject { ["name"] = "Raw (Ores, Crystals & Salvage)", ["value"] = "raw" },
+                    new JsonObject { ["name"] = "Refined Products", ["value"] = "refined" },
+                    new JsonObject { ["name"] = "Other", ["value"] = "other" }
+                }
+            },
+            new JsonObject
+            {
+                ["name"] = "search",
+                ["description"] = "Search for a specific item name across stations",
+                ["type"] = 3,
+                ["required"] = false
+            },
+            new JsonObject
+            {
+                ["name"] = "sort",
+                ["description"] = "Sort order for items",
+                ["type"] = 3,
+                ["required"] = false,
+                ["choices"] = new JsonArray
+                {
+                    new JsonObject { ["name"] = "Quantity (High to Low)", ["value"] = "count" },
+                    new JsonObject { ["name"] = "Volume m³ (High to Low)", ["value"] = "volume" },
+                    new JsonObject { ["name"] = "Name (A-Z)", ["value"] = "name" }
+                }
+            }
+        }
     };
 
     public async Task PostChannelMessageAsync(JsonObject embed, JsonArray? components = null, CancellationToken ct = default)

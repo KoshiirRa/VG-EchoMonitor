@@ -940,6 +940,80 @@
     .tab-btn { padding: 5px 10px; font-size: 11px; }
     .tab-pane { padding: 8px; }
   }
+  .rule-card {
+    background: var(--bg-panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .rule-card.disabled { opacity: 0.55; }
+  .rule-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .rule-pill {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    color: var(--text-primary);
+  }
+  .rule-form {
+    background: var(--bg-panel-alt);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px;
+    margin: 12px 0;
+  }
+  .rule-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .rule-field label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  .pill-toggle-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill-toggle {
+    padding: 4px 9px;
+    font-size: 11px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .pill-toggle.active {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.18);
+    color: var(--text-primary);
+  }
+  .stat-picker-list {
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    padding: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .preview-box {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 6px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+  }
 </style>
 </head>
 <body>
@@ -1165,6 +1239,9 @@
       <button class="tab-btn" data-tab="timeline" type="button" role="tab">
         Session Timeline <span id="count-timeline" class="tab-count">0</span>
       </button>
+      <button class="tab-btn" data-tab="enhanced" type="button" role="tab">
+        ECHO Enhanced <span id="count-enhanced" class="tab-count">--</span>
+      </button>
     </div>
 
     <!-- Tab 1: Loot & Modules -->
@@ -1181,7 +1258,7 @@
           <option value="Enhanced">Enhanced</option>
           <option value="Standard">Standard</option>
         </select>
-        <input id="filter-ilvl" class="filter-input" type="number" min="0" placeholder="Min iLvl" style="width:100px">
+        <input id="filter-ilvl" class="filter-input" type="number" min="0" placeholder="Min LVL" style="width:100px">
         <input id="filter-search" class="filter-input" type="text" placeholder="Search module or type..." style="flex:1;min-width:160px">
       </div>
       <div id="modules-container"></div>
@@ -1275,6 +1352,28 @@
         <span id="empire-refined-badge" class="mono neu"></span>
       </div>
       <div id="empire-refined-container"></div>
+
+      <div class="section-heading" style="margin-top:16px">
+        <span>Station &amp; Depot Inventory by Location</span>
+        <span id="empire-depots-badge" class="mono neu"></span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+        <input id="depot-filter-location" type="text" placeholder="Filter station / system / sector..." style="flex:1;min-width:180px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px" />
+        <input id="depot-filter-search" type="text" placeholder="Search item..." style="flex:1;min-width:150px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px" />
+        <select id="depot-filter-group" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:6px;font-size:12px">
+          <option value="all">All Categories</option>
+          <option value="raw">Raw (Ores / Crystals / Salvage)</option>
+          <option value="refined">Refined Products</option>
+          <option value="other">Other</option>
+        </select>
+        <select id="depot-filter-sort" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:6px;font-size:12px">
+          <option value="count">Sort: Quantity</option>
+          <option value="volume">Sort: Volume (m³)</option>
+          <option value="name">Sort: Name (A–Z)</option>
+        </select>
+        <button id="depot-refresh-btn" class="btn" style="padding:6px 12px;font-size:12px">Refresh</button>
+      </div>
+      <div id="empire-depots-container"><div class="empty-state">Click Refresh to load per-station inventories.</div></div>
     </div>
 
     <!-- Tab 3: Faction Rep -->
@@ -1318,6 +1417,172 @@
         <button id="btn-refresh-history" class="btn" type="button">Refresh History</button>
       </div>
       <div id="history-container"></div>
+    </div>
+
+    <!-- Tab 8: ECHO Enhanced -->
+    <div id="pane-enhanced" class="tab-pane">
+      <div id="enhanced-missing" class="empty-state hidden">
+        <strong>EchoEnhanced plugin not detected.</strong><br>
+        Install <code>EchoEnhanced.dll</code> alongside <code>EchoMonitor.dll</code> in <code>BepInEx/plugins/</code> to enable Auto-Favorite Modules and future ECHO Enhanced automation.
+      </div>
+      <div id="enhanced-content" class="hidden">
+        <div class="section-heading">
+          <span>Auto-Favorite Modules</span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="btn-enhanced-scan" class="btn" type="button">Scan Inventories Now</button>
+            <button id="btn-enhanced-refresh" class="btn" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <div class="filter-bar" style="gap:16px;flex-wrap:wrap;align-items:center">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input id="chk-autofav-enabled" type="checkbox"> <span>Auto-Favorite Enabled</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Only favourite items in the Armory so ECHO can auto-deposit loot from ship cargo">
+            <input id="chk-autofav-armory" type="checkbox"> <span>Armory Only</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input id="chk-autofav-dryrun" type="checkbox"> <span>Dry Run (Log Only)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input id="chk-autofav-scanload" type="checkbox"> <span>Scan on Save Load</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input id="chk-autofav-verbose" type="checkbox"> <span>Verbose Log</span>
+          </label>
+        </div>
+
+        <div class="section-heading">
+          <span>Auto-Favorite Rules <span id="enhanced-rules-path" class="mono muted" style="font-size:11px"></span></span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button id="btn-enhanced-new-rule" class="btn" type="button">+ New Rule</button>
+            <select id="sel-enhanced-preset" class="filter-select" aria-label="Add preset rule">
+              <option value="">+ Add Preset...</option>
+              <option value="legendary">All Legendary Equipment</option>
+              <option value="aspect">Exotic+ Any Aspect Gear</option>
+              <option value="wishlist">Wishlist: Exotic+ Missile/Swarm iLvl 90+</option>
+              <option value="reroll">Workshop Reroll (2-of-4 Crit/Energy Substats)</option>
+              <option value="mining">Exotic+ Mining &amp; Salvage Gear</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="enhanced-rules-list"></div>
+
+        <!-- Visual Rule Editor -->
+        <div id="enhanced-rule-editor" class="rule-form hidden">
+          <div class="section-heading" style="margin-top:0">
+            <span id="rule-editor-title">Edit Rule</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btn-rule-preview" class="btn" type="button">Test This Rule</button>
+              <button id="btn-rule-save" class="btn" type="button">Save Rule</button>
+              <button id="btn-rule-cancel" class="btn" type="button">Cancel</button>
+            </div>
+          </div>
+
+          <div class="rule-form-grid">
+            <div class="rule-field">
+              <label for="rf-name">Rule Name</label>
+              <input id="rf-name" class="filter-input" type="text" style="width:100%" placeholder="e.g. Exotic+ Crit Turrets">
+            </div>
+            <div class="rule-field">
+              <label for="rf-min-rarity">Min Rarity</label>
+              <select id="rf-min-rarity" class="filter-select" style="width:100%">
+                <option value="">Any</option>
+                <option value="Standard">Standard</option>
+                <option value="Enhanced">Enhanced</option>
+                <option value="HighGrade">HighGrade</option>
+                <option value="Exotic">Exotic</option>
+                <option value="Legendary">Legendary</option>
+              </select>
+            </div>
+            <div class="rule-field">
+              <label for="rf-max-rarity">Max Rarity</label>
+              <select id="rf-max-rarity" class="filter-select" style="width:100%">
+                <option value="">Any</option>
+                <option value="Standard">Standard</option>
+                <option value="Enhanced">Enhanced</option>
+                <option value="HighGrade">HighGrade</option>
+                <option value="Exotic">Exotic</option>
+                <option value="Legendary">Legendary</option>
+              </select>
+            </div>
+            <div class="rule-field">
+              <label for="rf-min-ilvl">Min iLvl</label>
+              <input id="rf-min-ilvl" class="filter-input" type="number" min="0" style="width:100%" placeholder="Any">
+            </div>
+            <div class="rule-field">
+              <label for="rf-max-ilvl">Max iLvl</label>
+              <input id="rf-max-ilvl" class="filter-input" type="number" min="0" style="width:100%" placeholder="Any">
+            </div>
+            <div class="rule-field">
+              <label for="rf-has-aspect">Aspect</label>
+              <select id="rf-has-aspect" class="filter-select" style="width:100%">
+                <option value="">Any</option>
+                <option value="true">Must Have Aspect</option>
+                <option value="false">No Aspect</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="rule-field" style="margin-bottom:10px">
+            <label>Categories (leave all unselected to match all equipment)</label>
+            <div id="rf-categories" class="pill-toggle-group">
+              <button type="button" class="pill-toggle" data-cat="Turret">Turret</button>
+              <button type="button" class="pill-toggle" data-cat="Module">Module</button>
+              <button type="button" class="pill-toggle" data-cat="Booster">Booster</button>
+              <button type="button" class="pill-toggle" data-cat="Drone">Drone</button>
+              <button type="button" class="pill-toggle" data-cat="DefensiveTurret">DefensiveTurret</button>
+            </div>
+          </div>
+
+          <div class="rule-form-grid">
+            <div class="rule-field">
+              <label for="rf-name-contains">Name Contains (comma-separated, matches ANY)</label>
+              <input id="rf-name-contains" class="filter-input" type="text" style="width:100%" placeholder="e.g. Microcell Swarm, Hailfire">
+            </div>
+            <div class="rule-field">
+              <label for="rf-name-excludes">Name Excludes (comma-separated)</label>
+              <input id="rf-name-excludes" class="filter-input" type="text" style="width:100%" placeholder="e.g. Salvage">
+            </div>
+            <div class="rule-field">
+              <label for="rf-aspect-contains">Aspect Contains (comma-separated, matches ANY)</label>
+              <input id="rf-aspect-contains" class="filter-input" type="text" list="rf-aspect-datalist" style="width:100%" placeholder="e.g. Punch Through">
+              <datalist id="rf-aspect-datalist"></datalist>
+            </div>
+          </div>
+
+          <div class="rule-field" style="margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+              <label style="margin:0">Workshop Reroll-Aware Substats ("N of M"):</label>
+              <label style="margin:0;display:flex;align-items:center;gap:5px">
+                Min Matches:
+                <input id="rf-substat-min" class="filter-input" type="number" min="1" value="2" style="width:64px">
+              </label>
+              <input id="rf-substat-search" class="filter-input" type="text" placeholder="Filter substats..." style="flex:1;min-width:160px">
+            </div>
+            <div id="rf-substat-selected" class="rule-pills" style="margin-bottom:6px"></div>
+            <div id="rf-substat-picker" class="stat-picker-list"></div>
+          </div>
+
+          <div id="rf-preview-box" class="preview-box hidden"></div>
+        </div>
+
+        <details style="margin:12px 0">
+          <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px">Advanced JSON Editor (Copy / Paste / Share Rules)</summary>
+          <div style="margin-top:8px">
+            <textarea id="enhanced-rules-editor" spellcheck="false" style="width:100%;min-height:200px;background:var(--bg-panel-alt);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:monospace;font-size:12px;line-height:1.45;resize:vertical"></textarea>
+            <div style="margin-top:6px;display:flex;gap:8px">
+              <button id="btn-enhanced-save-rules" class="btn" type="button">Save &amp; Reload Raw JSON</button>
+            </div>
+          </div>
+        </details>
+
+        <div class="section-heading" style="margin-top:16px">
+          <span>Recent Auto-Favorite Activity</span>
+        </div>
+        <div id="enhanced-events-container"></div>
+      </div>
     </div>
   </section>
 
@@ -1448,6 +1713,8 @@
       $("pane-" + tab).classList.add("active");
       if (tab === "timeline") {
         fetchHistory();
+      } else if (tab === "enhanced") {
+        fetchEnhancedStatus(true);
       }
     });
   });
@@ -1849,8 +2116,37 @@
         '<div class="kpi-card"><div class="kpi-label">Outpost Produced</div><div class="kpi-value mono">' + fmtNum(act.outpostProducedTotal || 0) + '</div><div class="kpi-sub neu">Crafted: ' + fmtNum(act.craftedTotal || 0) + '</div></div>' +
       '</div>';
 
-    // 2. Outpost Storage
-    $("empire-outposts-badge").textContent = outposts.length + " outpost(s)" + (fullCount > 0 ? " — " + fullCount + " ≥ 95%" : "");
+    // 2. Outpost Storage & Job Status
+    const stalledCount = outposts.filter((o) => o.hasStalledJob || o.state === "MissingMaterials" || o.state === "StorageFull" || o.state === "Raided").length;
+    const idleCount = outposts.filter((o) => o.state === "Idle" || o.state === "Unset").length;
+    const badgeParts = [outposts.length + " outpost(s)"];
+    if (stalledCount > 0) badgeParts.push(stalledCount + " stalled");
+    if (idleCount > 0) badgeParts.push(idleCount + " idle");
+    if (fullCount > 0) badgeParts.push(fullCount + " ≥ 95%");
+    $("empire-outposts-badge").textContent = badgeParts.join(" — ");
+
+    function fmtJobEta(sec) {
+      if (sec == null || sec < 0) return "";
+      const s = Math.round(sec);
+      if (s < 60) return s + "s";
+      const m = Math.floor(s / 60);
+      const rem = s % 60;
+      if (m < 60) return m + "m " + rem + "s";
+      const h = Math.floor(m / 60);
+      return h + "h " + (m % 60) + "m";
+    }
+
+    function statePillStyle(st) {
+      switch (st) {
+        case "Working": return "background:rgba(34,197,94,0.18);color:#4ade80;border:1px solid rgba(34,197,94,0.35)";
+        case "Upgrading": return "background:rgba(56,189,248,0.18);color:#38bdf8;border:1px solid rgba(56,189,248,0.35)";
+        case "MissingMaterials": return "background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.4)";
+        case "StorageFull":
+        case "Raided": return "background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4)";
+        default: return "background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.3)";
+      }
+    }
+
     if (!outposts.length) {
       $("empire-outposts-container").innerHTML = '<div class="empty-state">No player outposts owned.</div>';
     } else {
@@ -1864,24 +2160,67 @@
         const btnHtml = (o.largestStackCount >= 2 && o.hasActiveDepot)
           ? '<button class="btn btn-sm" onclick="relieveOutpost(\'' + esc(o.stationGuid) + '\')">Move ½ → Depot</button>'
           : '<span class="neu">--</span>';
-        return '<tr' + (isFull ? ' style="background:rgba(239,68,68,0.12)"' : '') + '>' +
+
+        const stLabel = o.state || "Idle";
+        const pillHtml = '<span style="display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;' + statePillStyle(stLabel) + '">' + esc(stLabel) + '</span>';
+        const jobs = Array.isArray(o.jobs) ? o.jobs : [];
+        let jobsHtml = "";
+        if (jobs.length > 0) {
+          jobsHtml = jobs.map((jb) => {
+            const jPct = Number(jb.progressPct || 0);
+            const jColor = jb.stalled ? "#ef4444" : (jb.paused || jb.awaitingSupplies ? "#f59e0b" : "#22c55e");
+            const tags = [];
+            if (jb.repeat) tags.push("↻");
+            if (jb.stalled) tags.push('<span style="color:#f87171;font-weight:600">STALLED</span>');
+            else if (jb.paused) tags.push('<span style="color:#fbbf24">PAUSED</span>');
+            else if (jb.awaitingSupplies) tags.push('<span style="color:#fbbf24">AWAITING SUPPLIES</span>');
+            const qtyTxt = (jb.initialAmount > 1 || jb.remainingAmount > 1)
+              ? ' <span class="neu">(' + fmtNum(jb.remainingAmount) + '/' + fmtNum(jb.initialAmount) + ')</span>'
+              : '';
+            const etaTxt = fmtJobEta(jb.timeRemainingSec);
+            return '<div style="margin-top:5px">' +
+              '<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px">' +
+                '<span>' + esc(jb.name || jb.jobType) + qtyTxt + (tags.length ? ' ' + tags.join(' ') : '') + '</span>' +
+                '<span class="mono neu">' + jPct.toFixed(0) + '%' + (etaTxt ? ' · ' + etaTxt : '') + '</span>' +
+              '</div>' +
+              '<div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;margin-top:2px">' +
+                '<div style="height:100%;width:' + Math.min(100, jPct).toFixed(1) + '%;background:' + jColor + '"></div>' +
+              '</div>' +
+            '</div>';
+          }).join("");
+        } else {
+          const emptyMsg = stLabel === "Unset" ? "Recipe unset" : (stLabel === "Working" ? "Active (" + esc(o.stationType) + ")" : "No active jobs");
+          jobsHtml = '<div class="neu" style="font-size:11px;margin-top:4px">' + emptyMsg + '</div>';
+        }
+
+        const rowBg = isFull ? ' style="background:rgba(239,68,68,0.12)"'
+          : (o.hasStalledJob ? ' style="background:rgba(245,158,11,0.08)"' : '');
+
+        return '<tr' + rowBg + '>' +
           '<td><strong>' + esc(o.name) + '</strong><div class="neu" style="font-size:11px">' + esc(o.sectorName) + ' / ' + esc(o.systemName) + ' (T' + (o.tier || 1) + ' ' + esc(o.stationType) + ')</div></td>' +
-          '<td class="mono" style="min-width:160px"><div style="display:flex;justify-content:space-between"><span>' + pct.toFixed(1) + '%</span><span class="neu">' + fmtNum(o.spaceUsed) + '/' + fmtNum(o.capacity) + ' m³</span></div>' +
+          '<td style="min-width:210px">' + pillHtml + jobsHtml + '</td>' +
+          '<td class="mono" style="min-width:150px"><div style="display:flex;justify-content:space-between"><span>' + pct.toFixed(1) + '%</span><span class="neu">' + fmtNum(o.spaceUsed) + '/' + fmtNum(o.capacity) + ' m³</span></div>' +
             '<div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-top:4px"><div style="height:100%;width:' + Math.min(100, pct).toFixed(1) + '%;background:' + barColor + '"></div></div></td>' +
           '<td class="mono">' + stackTxt + '</td>' +
           '<td style="text-align:right">' + btnHtml + '</td>' +
         '</tr>';
       }).join("");
       $("empire-outposts-container").innerHTML =
-        '<table class="data-table"><thead><tr><th>Outpost</th><th>Storage</th><th>Largest Stack</th><th style="text-align:right">Relief</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        '<table class="data-table"><thead><tr><th>Outpost</th><th>Status &amp; Jobs</th><th>Storage</th><th>Largest Stack</th><th style="text-align:right">Relief</th></tr></thead><tbody>' + rows + '</tbody></table>';
     }
 
     // 3. Depot Raw / Salvage Backlog
+    const winMins = Number(emp.backlogWindowMinutes || 0);
     const rawDelta = Number(emp.rawBacklogDelta || 0);
     const rawRate = Number(emp.rawBacklogRatePerHour || 0);
-    const rawTrend = rawDelta > 0 ? "GROWING" : (rawDelta < 0 ? "DRAINING" : "STEADY");
-    $("empire-backlog-badge").textContent =
-      "Total: " + fmtNum(emp.rawBacklogTotal || 0) + " (" + fmtSigned(rawDelta) + ", " + fmtSigned(rawRate) + "/hr — " + rawTrend + ")";
+    const rawWinDelta = Number(emp.rawBacklogWindowDelta || 0);
+    const rawWinRate = Number(emp.rawBacklogWindowRatePerHour || 0);
+    const rawTrendDelta = winMins > 0 ? rawWinDelta : rawDelta;
+    const rawTrend = rawTrendDelta > 0 ? "GROWING" : (rawTrendDelta < 0 ? "DRAINING" : "STEADY");
+    const winLabel = winMins >= 60 ? "last 1h" : ("last " + winMins + "m");
+    $("empire-backlog-badge").textContent = winMins > 0
+      ? "Total: " + fmtNum(emp.rawBacklogTotal || 0) + " (" + fmtSigned(rawWinDelta) + " " + winLabel + ", " + fmtSigned(rawWinRate) + "/hr — " + rawTrend + " | session " + fmtSigned(rawDelta) + ")"
+      : "Total: " + fmtNum(emp.rawBacklogTotal || 0) + " (" + fmtSigned(rawDelta) + ", " + fmtSigned(rawRate) + "/hr — " + rawTrend + ")";
     const rawItems = Array.isArray(emp.rawBacklogItems) ? emp.rawBacklogItems.slice(0, 20) : [];
     if (!rawItems.length) {
       $("empire-backlog-container").innerHTML = '<div class="empty-state">No raw materials or salvage in depot.</div>';
@@ -1909,8 +2248,11 @@
     ];
     const refDelta = Number(emp.refinedStockDelta || 0);
     const refRate = Number(emp.refinedStockRatePerHour || 0);
-    $("empire-refined-badge").textContent =
-      "Total: " + fmtNum(emp.refinedStockTotal || 0) + " (" + fmtSigned(refDelta) + ", " + fmtSigned(refRate) + "/hr)";
+    const refWinDelta = Number(emp.refinedStockWindowDelta || 0);
+    const refWinRate = Number(emp.refinedStockWindowRatePerHour || 0);
+    $("empire-refined-badge").textContent = winMins > 0
+      ? "Total: " + fmtNum(emp.refinedStockTotal || 0) + " (" + fmtSigned(refWinDelta) + " " + winLabel + ", " + fmtSigned(refWinRate) + "/hr | session " + fmtSigned(refDelta) + ")"
+      : "Total: " + fmtNum(emp.refinedStockTotal || 0) + " (" + fmtSigned(refDelta) + ", " + fmtSigned(refRate) + "/hr)";
     const rawRefItems = Array.isArray(emp.refinedStockItems) ? emp.refinedStockItems : [];
     const refByName = new Map();
     for (const it of rawRefItems) {
@@ -1955,7 +2297,132 @@
     }).join("");
     $("empire-refined-container").innerHTML =
       '<table class="data-table"><thead><tr><th>Refined Product</th><th style="text-align:right">Depot Stock</th><th style="text-align:right">Session Δ</th><th style="text-align:right">Rate</th></tr></thead><tbody>' + rows + '</tbody></table>';
+
+    if (!window._depotsLoadedOnce) {
+      window._depotsLoadedOnce = true;
+      loadDepotInventories();
+    }
   }
+
+  let _cachedDepotData = null;
+
+  async function loadDepotInventories() {
+    const badge = $("empire-depots-badge");
+    const container = $("empire-depots-container");
+    if (badge) badge.textContent = "Loading...";
+    try {
+      const res = await fetch("/api/depots");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      _cachedDepotData = await res.json();
+      renderDepotInventories();
+    } catch (err) {
+      if (badge) badge.textContent = "Error";
+      if (container) container.innerHTML = '<div class="empty-state">Failed to load station inventories: ' + esc(String(err)) + '</div>';
+    }
+  }
+
+  function renderDepotInventories() {
+    const badge = $("empire-depots-badge");
+    const container = $("empire-depots-container");
+    if (!container) return;
+    const data = _cachedDepotData;
+    if (!data || !data.inGame) {
+      if (badge) badge.textContent = "";
+      container.innerHTML = '<div class="empty-state">Not currently in game.</div>';
+      return;
+    }
+
+    const locQ = ($("depot-filter-location")?.value || "").trim().toLowerCase();
+    const itemQ = ($("depot-filter-search")?.value || "").trim().toLowerCase();
+    const grpFilter = $("depot-filter-group")?.value || "all";
+    const sortBy = $("depot-filter-sort")?.value || "count";
+
+    const stations = Array.isArray(data.stations) ? data.stations : [];
+    const filteredStations = [];
+    let totalMatchingUnits = 0;
+
+    for (const st of stations) {
+      if (locQ) {
+        const hay = ((st.name || "") + " " + (st.systemName || "") + " " + (st.sectorName || "")).toLowerCase();
+        if (!hay.includes(locQ)) continue;
+      }
+      const rawItems = Array.isArray(st.items) ? st.items : [];
+      const items = rawItems.filter((it) => {
+        if (grpFilter !== "all" && (it.group || "other") !== grpFilter) return false;
+        if (itemQ && !(it.name || "").toLowerCase().includes(itemQ)) return false;
+        return true;
+      });
+      if ((itemQ || grpFilter !== "all") && items.length === 0) continue;
+
+      items.sort((a, b) => {
+        if (sortBy === "volume") return Number(b.spaceM3 || 0) - Number(a.spaceM3 || 0);
+        if (sortBy === "name") return String(a.name || "").localeCompare(String(b.name || ""));
+        return Number(b.count || 0) - Number(a.count || 0);
+      });
+
+      const stationUnits = items.reduce((s, it) => s + Number(it.count || 0), 0);
+      totalMatchingUnits += stationUnits;
+      filteredStations.push({ st, items, stationUnits });
+    }
+
+    if (badge) {
+      badge.textContent = filteredStations.length + " station(s) — " + fmtNum(totalMatchingUnits) + " units";
+    }
+
+    if (!filteredStations.length) {
+      container.innerHTML = '<div class="empty-state">No stations or items match the current filter.</div>';
+      return;
+    }
+
+    const autoOpen = filteredStations.length <= 2 || Boolean(locQ) || Boolean(itemQ);
+    container.innerHTML = filteredStations.map(({ st, items, stationUnits }) => {
+      const tags = [];
+      if (st.isHomeStation) tags.push('<span class="badge" style="background:rgba(56,189,248,0.18);color:#38bdf8;margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px">Home</span>');
+      if (st.isActiveDepot) tags.push('<span class="badge" style="background:rgba(34,197,94,0.18);color:#4ade80;margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px">Depot</span>');
+      if (st.isPlayerOutpost) tags.push('<span class="badge" style="background:rgba(168,85,247,0.18);color:#c084fc;margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px">Outpost</span>');
+
+      const locText = [st.systemName, st.sectorName].filter(Boolean).join(" • ");
+      const pct = Number(st.fillPct || 0).toFixed(1);
+      const rows = items.length
+        ? items.map((it) => {
+            const grpColor = it.group === "raw" ? "#f59e0b" : (it.group === "refined" ? "#38bdf8" : "#94a3b8");
+            return '<tr>' +
+              '<td>' + esc(it.name) + ' <span class="neu" style="font-size:11px">(' + esc(it.category) + ')</span></td>' +
+              '<td style="text-align:center"><span style="font-size:10px;text-transform:uppercase;color:' + grpColor + '">' + esc(it.group) + '</span></td>' +
+              '<td class="mono" style="text-align:right">' + fmtNum(it.count) + '</td>' +
+              '<td class="mono neu" style="text-align:right">' + Number(it.spaceM3 || 0).toFixed(1) + ' m³</td>' +
+            '</tr>';
+          }).join("")
+        : '<tr><td colspan="4" class="neu" style="text-align:center;padding:8px">Empty storage</td></tr>';
+
+      return '<details' + (autoOpen ? ' open' : '') + ' style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;padding:8px 12px">' +
+        '<summary style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;list-style:none">' +
+          '<div><strong>' + esc(st.name || "Station") + '</strong>' + tags.join("") +
+            (locText ? ' <span class="neu" style="font-size:11px;margin-left:6px">' + esc(locText) + '</span>' : '') +
+          '</div>' +
+          '<div class="mono" style="font-size:12px">' +
+            '<span>' + pct + '%</span> <span class="neu">(' + fmtNum(Math.round(st.spaceUsed || 0)) + '/' + fmtNum(Math.round(st.capacity || 0)) + ' m³ • ' + fmtNum(stationUnits) + ' units)</span>' +
+          '</div>' +
+        '</summary>' +
+        '<div style="margin-top:8px">' +
+          '<table class="data-table"><thead><tr><th>Item</th><th style="text-align:center">Group</th><th style="text-align:right">Qty</th><th style="text-align:right">Volume</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '</div>' +
+      '</details>';
+    }).join("");
+  }
+
+  ["depot-filter-location", "depot-filter-search"].forEach((id) => {
+    const el = $(id);
+    if (el) el.addEventListener("input", renderDepotInventories);
+  });
+  ["depot-filter-group", "depot-filter-sort"].forEach((id) => {
+    const el = $(id);
+    if (el) el.addEventListener("change", renderDepotInventories);
+  });
+  if ($("depot-refresh-btn")) {
+    $("depot-refresh-btn").addEventListener("click", loadDepotInventories);
+  }
+
 
   function renderRank(key, val, delta) {
     $("rank-" + key).textContent = fmtNum(val);
@@ -1980,7 +2447,7 @@
         const aspectsTxt = Array.isArray(m.aspects)
           ? m.aspects.map((a) => (a.name || "") + " " + (a.description || "")).join(" ")
           : "";
-        const hay = ((m.name || "") + " " + (m.equipmentType || "") + " " + (m.rarity || "") + " " + substatsTxt + " " + aspectsTxt).toLowerCase();
+        const hay = ((m.name || "") + " " + (m.size || "") + " " + (m.equipmentType || "") + " " + (m.rarity || "") + " " + substatsTxt + " " + aspectsTxt).toLowerCase();
         if (!hay.includes(search)) return false;
       }
       return true;
@@ -1991,7 +2458,7 @@
       return;
     }
 
-    const rows = filtered.map((m) => {
+    const rows = filtered.map((m, idx) => {
       const substats = Array.isArray(m.substats) ? m.substats : [];
       const aspects = Array.isArray(m.aspects) ? m.aspects : [];
       let detailsHtml = "";
@@ -2014,16 +2481,27 @@
         "<td><strong>" + esc(m.name) + "</strong></td>" +
         "<td>" + rarityBadge(m.rarity) + "</td>" +
         '<td class="num">' + fmtNum(m.itemLevel) + "</td>" +
+        '<td class="mono">' + esc(m.size || "--") + "</td>" +
         '<td class="mono">' + esc(m.equipmentType || "--") + "</td>" +
         "<td>" + detailsHtml + "</td>" +
         '<td class="num pos">+' + fmtNum(m.gained) + "</td>" +
+        '<td><button type="button" class="btn btn-make-rule" data-mod-idx="' + idx + '" style="padding:3px 7px;font-size:11px" title="Create Auto-Favorite rule from this module">&#9733; Rule</button></td>' +
       "</tr>";
     }).join("");
 
     $("modules-container").innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      '<th>Module</th><th>Rarity</th><th class="num">iLvl</th><th>Type</th><th>Substats &amp; Aspects</th><th class="num">Gained</th>' +
+      '<th>Module</th><th>Rarity</th><th class="num">LVL</th><th>Size</th><th>Type</th><th>Substats &amp; Aspects</th><th class="num">Gained</th><th></th>' +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>";
+
+    $("modules-container").querySelectorAll(".btn-make-rule").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const mod = filtered[Number(btn.getAttribute("data-mod-idx"))];
+        if (mod && typeof openRuleFromModule === "function") {
+          openRuleFromModule(mod);
+        }
+      });
+    });
   }
 
   function renderLockedCrates(crates, total) {
@@ -2044,7 +2522,7 @@
 
     $("crates-container").innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      '<th>Crate</th><th>Rarity</th><th class="num">iLvl</th><th class="num">Gained</th>' +
+      '<th>Crate</th><th>Rarity</th><th class="num">LVL</th><th class="num">Gained</th>' +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>";
   }
 
@@ -2385,6 +2863,8 @@
     $("hangar-container").innerHTML = '<div class="fighter-grid">' + cards + "</div>";
   }
 
+  const expandedMissionBoards = new Set();
+
   function renderMissionLog(log) {
     const items = Array.isArray(log) ? log : [];
     $("count-missions").textContent = items.length;
@@ -2401,7 +2881,7 @@
       return;
     }
 
-    const rows = items.map((m) => {
+    const rows = items.map((m, idx) => {
       const ev = (m.event || "Unknown").trim();
       const evLow = ev.toLowerCase();
       let evCls = "pill-state";
@@ -2409,20 +2889,71 @@
       else if (evLow === "abandoned") evCls = "pill-docked";
       else if (evLow === "failed") evCls = "btn-danger";
 
-      return "<tr>" +
+      const sysSec = [m.systemName, m.sectorName].filter(Boolean).join(" · ");
+      let locHtml = '<span class="neu">--</span>';
+      if (m.stationName && sysSec) {
+        locHtml = "<strong>" + esc(m.stationName) + '</strong><div class="neu" style="font-size:11px">' + esc(sysSec) + "</div>";
+      } else if (m.stationName) {
+        locHtml = "<strong>" + esc(m.stationName) + "</strong>";
+      } else if (sysSec) {
+        locHtml = '<span class="neu">' + esc(sysSec) + "</span>";
+      }
+
+      const board = Array.isArray(m.boardMissions) ? m.boardMissions : [];
+      const rowKey = String(m.timestamp || idx) + "|" + String(m.missionName || "");
+      const isOpen = board.length > 0 && expandedMissionBoards.has(rowKey);
+      const boardBtn = board.length > 0
+        ? ' <button type="button" class="btn-secondary mission-board-toggle" data-key="' + esc(rowKey) + '" style="padding:1px 6px;font-size:11px;margin-left:6px">' + (isOpen ? "▼" : "▶") + " Board (" + board.length + ")</button>"
+        : "";
+
+      let html = "<tr>" +
         '<td class="mono">' + esc(fmtTime(m.timestamp)) + "</td>" +
         '<td><span class="pill ' + evCls + '">' + esc(ev) + "</span></td>" +
         "<td><strong>" + formatRichText(m.missionName || "Unknown Mission") + "</strong>" +
-          (m.isStory ? ' <span class="badge-unlocked">STORY</span>' : "") + "</td>" +
+          (m.isStory ? ' <span class="badge-unlocked">STORY</span>' : "") + boardBtn + "</td>" +
         '<td class="mono">' + esc(m.gameplayType || "--") + "</td>" +
+        "<td>" + locHtml + "</td>" +
         '<td class="neu">' + (m.reason ? formatRichText(m.reason) : "--") + "</td>" +
       "</tr>";
+
+      if (board.length > 0) {
+        const boardItemsHtml = board.map((bm) => {
+          const tags = Array.isArray(bm.tags) ? bm.tags : [];
+          const tagPills = tags.map((t) => '<span class="pill pill-state" style="font-size:10px;padding:1px 6px;margin-left:4px">' + esc(t) + "</span>").join("");
+          return '<div style="padding:3px 0;display:flex;flex-wrap:wrap;align-items:center;gap:2px">' +
+            '<span>• ' + formatRichText(bm.name || "Unknown Mission") + "</span>" + tagPills + "</div>";
+        }).join("");
+        html += '<tr class="mission-board-row" data-key="' + esc(rowKey) + '" style="' + (isOpen ? "" : "display:none;") + 'background:rgba(255,255,255,0.02)">' +
+          '<td colspan="6" style="padding:8px 14px 10px 28px">' +
+            '<div class="neu" style="font-size:11px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em">Station Mission Board (' + board.length + ")</div>" +
+            boardItemsHtml +
+          "</td></tr>";
+      }
+
+      return html;
     }).join("");
 
     $("missions-container").innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      "<th>Time</th><th>Event</th><th>Mission</th><th>Type</th><th>Reason</th>" +
+      "<th>Time</th><th>Event</th><th>Mission</th><th>Type</th><th>Location</th><th>Reason</th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>";
+
+    $("missions-container").querySelectorAll(".mission-board-toggle").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.getAttribute("data-key");
+        if (!key) return;
+        const detailRow = $("missions-container").querySelector('tr.mission-board-row[data-key="' + CSS.escape(key) + '"]');
+        if (expandedMissionBoards.has(key)) {
+          expandedMissionBoards.delete(key);
+          if (detailRow) detailRow.style.display = "none";
+          btn.textContent = btn.textContent.replace("▼", "▶");
+        } else {
+          expandedMissionBoards.add(key);
+          if (detailRow) detailRow.style.display = "";
+          btn.textContent = btn.textContent.replace("▶", "▼");
+        }
+      });
+    });
   }
 
   function renderReputation(repList) {
@@ -2611,9 +3142,528 @@
     };
   }
 
+  // ECHO Enhanced Tab — Visual Rule Builder, Catalog, Preview & Presets
+  let enhancedRulesLoaded = false;
+  let enhancedRules = [];
+  let enhancedCatalog = { substats: [], aspects: [] };
+  let editingRuleIdx = -1;
+  let editorSelectedSubstats = [];
+
+  const ENHANCED_PRESETS = {
+    legendary: {
+      name: "All Legendary Equipment",
+      enabled: true,
+      minRarity: "Legendary"
+    },
+    aspect: {
+      name: "Exotic+ Any Aspect Gear",
+      enabled: true,
+      minRarity: "Exotic",
+      hasAspect: true
+    },
+    wishlist: {
+      name: "Wishlist: Exotic+ Missile/Swarm iLvl 90+",
+      enabled: true,
+      categories: ["Turret"],
+      nameContains: ["Microcell Swarm", "Hailfire", "Missile Launcher"],
+      minRarity: "Exotic",
+      minItemLevel: 90
+    },
+    reroll: {
+      name: "Workshop Reroll (2-of-4 Crit/Energy Substats)",
+      enabled: true,
+      categories: ["Turret", "Module", "Booster"],
+      minRarity: "Exotic",
+      minItemLevel: 85,
+      substats: {
+        minMatches: 2,
+        anyOf: ["Turret Rotation Speed", "Critical Damage", "Energy Damage", "Reload Speed"]
+      }
+    },
+    mining: {
+      name: "Exotic+ Mining & Salvage Gear",
+      enabled: true,
+      nameContains: ["Mining", "Salvage"],
+      minRarity: "Exotic",
+      minItemLevel: 80
+    }
+  };
+
+  async function fetchEnhancedCatalog() {
+    try {
+      const resp = await fetch("/api/enhanced/autofav/catalog", { cache: "no-store" });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      enhancedCatalog = {
+        substats: Array.isArray(data.substats) ? data.substats : [],
+        aspects: Array.isArray(data.aspects) ? data.aspects : []
+      };
+      const dl = $("rf-aspect-datalist");
+      dl.innerHTML = enhancedCatalog.aspects.map((a) => '<option value="' + esc(a) + '"></option>').join("");
+      renderSubstatPicker();
+    } catch (_) {}
+  }
+
+  async function fetchEnhancedStatus(loadRules) {
+    try {
+      const resp = await fetch("/api/enhanced/status", { cache: "no-store" });
+      if (!resp.ok) {
+        $("count-enhanced").textContent = "OFF";
+        $("enhanced-missing").classList.remove("hidden");
+        $("enhanced-content").classList.add("hidden");
+        return;
+      }
+      const data = await resp.json();
+      if (!data || !data.installed) {
+        $("count-enhanced").textContent = "OFF";
+        $("enhanced-missing").classList.remove("hidden");
+        $("enhanced-content").classList.add("hidden");
+        return;
+      }
+      $("enhanced-missing").classList.add("hidden");
+      $("enhanced-content").classList.remove("hidden");
+
+      const af = data.autoFavorite || {};
+      $("count-enhanced").textContent = (af.enabledRuleCount || 0) + "/" + (af.ruleCount || 0);
+      $("chk-autofav-enabled").checked = !!af.enabled;
+      $("chk-autofav-armory").checked = af.armoryOnly !== false;
+      $("chk-autofav-dryrun").checked = !!af.dryRun;
+      $("chk-autofav-scanload").checked = !!af.scanOnLoad;
+      $("chk-autofav-verbose").checked = !!af.verboseLog;
+      $("enhanced-rules-path").textContent = af.rulesPath || "";
+
+      renderEnhancedEvents(af.recentEvents || []);
+
+      if (enhancedCatalog.substats.length === 0) {
+        fetchEnhancedCatalog();
+      }
+
+      if (loadRules || !enhancedRulesLoaded) {
+        const rResp = await fetch("/api/enhanced/autofav/rules", { cache: "no-store" });
+        if (rResp.ok) {
+          const raw = await rResp.text();
+          $("enhanced-rules-editor").value = raw;
+          try {
+            const parsed = JSON.parse(raw);
+            enhancedRules = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.rules) ? parsed.rules : []);
+          } catch (_) {
+            enhancedRules = [];
+          }
+          renderRuleCards();
+          enhancedRulesLoaded = true;
+        }
+      }
+    } catch (_) {
+      $("count-enhanced").textContent = "OFF";
+      $("enhanced-missing").classList.remove("hidden");
+      $("enhanced-content").classList.add("hidden");
+    }
+  }
+
+  function renderRuleCards() {
+    const el = $("enhanced-rules-list");
+    if (!enhancedRules.length) {
+      el.innerHTML = '<div class="empty-state">No Auto-Favorite rules yet. Click <strong>+ New Rule</strong> or pick a preset above.</div>';
+      return;
+    }
+
+    el.innerHTML = enhancedRules.map((r, idx) => {
+      const enabled = r.enabled !== false;
+      const pills = [];
+      if (r.minRarity || r.maxRarity) {
+        pills.push((r.minRarity || "Any") + (r.maxRarity ? " – " + r.maxRarity : "+"));
+      }
+      if (r.minItemLevel != null || r.maxItemLevel != null) {
+        pills.push("iLvl " + (r.minItemLevel != null ? "≥" + r.minItemLevel : "") + (r.maxItemLevel != null ? " ≤" + r.maxItemLevel : ""));
+      }
+      if (Array.isArray(r.categories) && r.categories.length) {
+        pills.push(r.categories.join(", "));
+      } else {
+        pills.push("All Equipment");
+      }
+      if (Array.isArray(r.nameContains) && r.nameContains.length) {
+        pills.push("Name: " + r.nameContains.join(" | "));
+      }
+      if (r.hasAspect === true) pills.push("Has Aspect");
+      if (r.hasAspect === false) pills.push("No Aspect");
+      if (Array.isArray(r.aspectContains) && r.aspectContains.length) {
+        pills.push("Aspect: " + r.aspectContains.join(" | "));
+      }
+      if (r.substats && Array.isArray(r.substats.anyOf) && r.substats.anyOf.length) {
+        pills.push((r.substats.minMatches || 1) + " of " + r.substats.anyOf.length + " substats");
+      }
+
+      return '<div class="rule-card' + (enabled ? "" : " disabled") + '">' +
+        '<div style="flex:1;min-width:220px">' +
+          '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">' +
+            '<input type="checkbox" class="chk-rule-toggle" data-idx="' + idx + '"' + (enabled ? " checked" : "") + '>' +
+            '<span>' + esc(r.name || ("Rule #" + (idx + 1))) + '</span>' +
+          '</label>' +
+          '<div class="rule-pills">' + pills.map((p) => '<span class="rule-pill">' + esc(p) + '</span>').join("") + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button type="button" class="btn btn-rule-edit" data-idx="' + idx + '">Edit</button>' +
+          '<button type="button" class="btn btn-rule-dup" data-idx="' + idx + '">Duplicate</button>' +
+          '<button type="button" class="btn btn-rule-del" data-idx="' + idx + '">Delete</button>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+
+    el.querySelectorAll(".chk-rule-toggle").forEach((chk) => {
+      chk.addEventListener("change", () => {
+        const i = Number(chk.getAttribute("data-idx"));
+        enhancedRules[i].enabled = chk.checked;
+        persistEnhancedRules("Updated rule state.");
+      });
+    });
+    el.querySelectorAll(".btn-rule-edit").forEach((btn) => {
+      btn.addEventListener("click", () => openRuleEditor(Number(btn.getAttribute("data-idx"))));
+    });
+    el.querySelectorAll(".btn-rule-dup").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-idx"));
+        const copy = JSON.parse(JSON.stringify(enhancedRules[i]));
+        copy.name = (copy.name || "Rule") + " (Copy)";
+        enhancedRules.splice(i + 1, 0, copy);
+        persistEnhancedRules("Duplicated rule.");
+      });
+    });
+    el.querySelectorAll(".btn-rule-del").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-idx"));
+        enhancedRules.splice(i, 1);
+        if (editingRuleIdx === i) closeRuleEditor();
+        persistEnhancedRules("Deleted rule.");
+      });
+    });
+  }
+
+  async function persistEnhancedRules(toastMsg) {
+    const raw = JSON.stringify({ rules: enhancedRules }, null, 2);
+    $("enhanced-rules-editor").value = raw;
+    renderRuleCards();
+    try {
+      const resp = await fetch("/api/enhanced/autofav/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: raw
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        showToast(toastMsg || ("Saved " + data.ruleCount + " rule(s)."), false);
+        fetchEnhancedStatus(false);
+      } else {
+        showToast("Rule save failed: " + (data.error || "Unknown error"), true);
+      }
+    } catch (e) {
+      showToast("Error saving rules: " + e.message, true);
+    }
+  }
+
+  function openRuleEditor(idx, prefillRule) {
+    editingRuleIdx = idx;
+    const rule = prefillRule || (idx >= 0 ? enhancedRules[idx] : { name: "New Rule", enabled: true });
+    $("rule-editor-title").textContent = idx >= 0 ? "Edit Rule" : "New Rule";
+    $("rf-name").value = rule.name || "";
+    $("rf-min-rarity").value = rule.minRarity || "";
+    $("rf-max-rarity").value = rule.maxRarity || "";
+    $("rf-min-ilvl").value = rule.minItemLevel != null ? String(rule.minItemLevel) : "";
+    $("rf-max-ilvl").value = rule.maxItemLevel != null ? String(rule.maxItemLevel) : "";
+    $("rf-has-aspect").value = rule.hasAspect === true ? "true" : (rule.hasAspect === false ? "false" : "");
+    $("rf-name-contains").value = Array.isArray(rule.nameContains) ? rule.nameContains.join(", ") : "";
+    $("rf-name-excludes").value = Array.isArray(rule.nameExcludes) ? rule.nameExcludes.join(", ") : "";
+    $("rf-aspect-contains").value = Array.isArray(rule.aspectContains) ? rule.aspectContains.join(", ") : "";
+
+    const cats = new Set(Array.isArray(rule.categories) ? rule.categories : []);
+    $("rf-categories").querySelectorAll(".pill-toggle").forEach((btn) => {
+      btn.classList.toggle("active", cats.has(btn.getAttribute("data-cat")));
+    });
+
+    editorSelectedSubstats = (rule.substats && Array.isArray(rule.substats.anyOf)) ? rule.substats.anyOf.slice() : [];
+    $("rf-substat-min").value = (rule.substats && rule.substats.minMatches) ? String(rule.substats.minMatches) : "2";
+    $("rf-substat-search").value = "";
+    renderSubstatPicker();
+
+    $("rf-preview-box").classList.add("hidden");
+    $("rf-preview-box").innerHTML = "";
+    $("enhanced-rule-editor").classList.remove("hidden");
+    $("enhanced-rule-editor").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function closeRuleEditor() {
+    editingRuleIdx = -1;
+    $("enhanced-rule-editor").classList.add("hidden");
+  }
+
+  function splitCsv(val) {
+    return (val || "").split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+  }
+
+  function buildRuleFromForm() {
+    const rule = {
+      name: ($("rf-name").value || "").trim() || "Unnamed Rule",
+      enabled: editingRuleIdx >= 0 ? (enhancedRules[editingRuleIdx].enabled !== false) : true
+    };
+    const cats = [];
+    $("rf-categories").querySelectorAll(".pill-toggle.active").forEach((b) => cats.push(b.getAttribute("data-cat")));
+    if (cats.length) rule.categories = cats;
+
+    const minR = $("rf-min-rarity").value;
+    const maxR = $("rf-max-rarity").value;
+    if (minR) rule.minRarity = minR;
+    if (maxR) rule.maxRarity = maxR;
+
+    const minLvl = $("rf-min-ilvl").value.trim();
+    const maxLvl = $("rf-max-ilvl").value.trim();
+    if (minLvl !== "") rule.minItemLevel = Number(minLvl);
+    if (maxLvl !== "") rule.maxItemLevel = Number(maxLvl);
+
+    const hasAsp = $("rf-has-aspect").value;
+    if (hasAsp === "true") rule.hasAspect = true;
+    else if (hasAsp === "false") rule.hasAspect = false;
+
+    const nc = splitCsv($("rf-name-contains").value);
+    if (nc.length) rule.nameContains = nc;
+    const ne = splitCsv($("rf-name-excludes").value);
+    if (ne.length) rule.nameExcludes = ne;
+    const ac = splitCsv($("rf-aspect-contains").value);
+    if (ac.length) rule.aspectContains = ac;
+
+    if (editorSelectedSubstats.length) {
+      rule.substats = {
+        minMatches: Math.max(1, Number($("rf-substat-min").value || 1)),
+        anyOf: editorSelectedSubstats.slice()
+      };
+    }
+    return rule;
+  }
+
+  function renderSubstatPicker() {
+    const selEl = $("rf-substat-selected");
+    selEl.innerHTML = editorSelectedSubstats.length
+      ? editorSelectedSubstats.map((s) =>
+          '<button type="button" class="pill-toggle active" data-remove-stat="' + esc(s) + '">' + esc(s) + ' &times;</button>'
+        ).join("")
+      : '<span class="muted" style="font-size:11px">No substats selected (click below to add)</span>';
+
+    selEl.querySelectorAll("[data-remove-stat]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const st = btn.getAttribute("data-remove-stat");
+        editorSelectedSubstats = editorSelectedSubstats.filter((x) => x !== st);
+        renderSubstatPicker();
+      });
+    });
+
+    const filter = ($("rf-substat-search").value || "").trim().toLowerCase();
+    const list = enhancedCatalog.substats.filter((s) => !filter || s.toLowerCase().includes(filter));
+    const pickerEl = $("rf-substat-picker");
+    if (!list.length) {
+      pickerEl.innerHTML = '<span class="muted" style="font-size:11px">No matching substats in catalog.</span>';
+      return;
+    }
+    const selSet = new Set(editorSelectedSubstats);
+    pickerEl.innerHTML = list.map((s) =>
+      '<button type="button" class="pill-toggle' + (selSet.has(s) ? " active" : "") + '" data-pick-stat="' + esc(s) + '">' + esc(s) + '</button>'
+    ).join("");
+
+    pickerEl.querySelectorAll("[data-pick-stat]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const st = btn.getAttribute("data-pick-stat");
+        if (editorSelectedSubstats.includes(st)) {
+          editorSelectedSubstats = editorSelectedSubstats.filter((x) => x !== st);
+        } else {
+          editorSelectedSubstats.push(st);
+        }
+        renderSubstatPicker();
+      });
+    });
+  }
+
+  function stripSubstatPrefix(line) {
+    return (line || "").replace(/^[+-]?[\d,]+(\.\d+)?%?\s*/, "").trim();
+  }
+
+  function openRuleFromModule(mod) {
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-pane").forEach((p) => p.classList.remove("active"));
+    const enhBtn = document.querySelector('.tab-btn[data-tab="enhanced"]');
+    if (enhBtn) enhBtn.classList.add("active");
+    $("pane-enhanced").classList.add("active");
+
+    fetchEnhancedStatus(true).then(() => {
+      const cleanStats = Array.isArray(mod.substats)
+        ? Array.from(new Set(mod.substats.map(stripSubstatPrefix).filter((s) => s.length > 0)))
+        : [];
+      const aspects = Array.isArray(mod.aspects)
+        ? mod.aspects.map((a) => (a && a.name ? a.name : "")).filter((s) => s.length > 0)
+        : [];
+      const prefill = {
+        name: (mod.rarity || "") + " " + (mod.name || "Module"),
+        enabled: true,
+        nameContains: mod.name ? [mod.name] : [],
+        minRarity: mod.rarity || "",
+        minItemLevel: mod.itemLevel != null ? Number(mod.itemLevel) : undefined,
+        aspectContains: aspects,
+        substats: cleanStats.length ? { minMatches: Math.max(1, cleanStats.length - 1), anyOf: cleanStats } : undefined
+      };
+      openRuleEditor(-1, prefill);
+      showToast("Pre-filled rule from " + (mod.name || "module") + " — tweak and click Save Rule.", false);
+    });
+  }
+
+  $("rf-categories").querySelectorAll(".pill-toggle").forEach((btn) => {
+    btn.addEventListener("click", () => btn.classList.toggle("active"));
+  });
+  $("rf-substat-search").addEventListener("input", renderSubstatPicker);
+  $("btn-enhanced-new-rule").addEventListener("click", () => openRuleEditor(-1));
+  $("btn-rule-cancel").addEventListener("click", closeRuleEditor);
+  $("btn-rule-save").addEventListener("click", () => {
+    const rule = buildRuleFromForm();
+    if (editingRuleIdx >= 0) {
+      enhancedRules[editingRuleIdx] = rule;
+    } else {
+      enhancedRules.push(rule);
+    }
+    closeRuleEditor();
+    persistEnhancedRules("Saved rule '" + rule.name + "'.");
+  });
+
+  $("btn-rule-preview").addEventListener("click", async () => {
+    const box = $("rf-preview-box");
+    box.classList.remove("hidden");
+    box.innerHTML = '<span class="muted">Testing rule against player inventories...</span>';
+    try {
+      const rule = buildRuleFromForm();
+      const resp = await fetch("/api/enhanced/autofav/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rule, includeFavourited: true })
+      });
+      const data = await resp.json();
+      if (!data.ok) {
+        box.innerHTML = '<span class="neg">Preview error: ' + esc(data.error || "Unknown") + '</span>';
+        return;
+      }
+      const matches = data.matches || [];
+      let html = '<div style="margin-bottom:6px;font-size:12px"><strong>' + matches.length + ' match(es)</strong> across ' +
+        data.itemsScanned + ' items (' + data.inventoriesScanned + ' inventories):</div>';
+      if (!matches.length) {
+        html += '<div class="muted" style="font-size:12px">No items currently in your inventories match this rule.</div>';
+      } else {
+        html += '<table class="data-table"><thead><tr><th>Item</th><th>iLvl</th><th>Category</th><th>Substats / Aspects</th><th>Status</th></tr></thead><tbody>';
+        for (const m of matches.slice(0, 25)) {
+          const rCls = "rarity-" + (m.rarity || "Standard");
+          const details = [].concat(m.substats || [], (m.aspects || []).map((a) => "★ " + a)).join(" · ");
+          const status = m.alreadyFavourited ? '<span class="muted">Already Fav</span>' : '<span class="pos">Would Fav</span>';
+          html += '<tr><td class="' + esc(rCls) + '">' + esc(m.displayName) + '</td><td class="mono">' + esc(m.itemLevel) +
+            '</td><td>' + esc(m.category) + '</td><td style="font-size:11px">' + esc(details) + '</td><td>' + status + '</td></tr>';
+        }
+        html += '</tbody></table>';
+        if (matches.length > 25) {
+          html += '<div class="muted" style="font-size:11px;margin-top:4px">Showing first 25 of ' + matches.length + ' matches.</div>';
+        }
+      }
+      box.innerHTML = html;
+    } catch (e) {
+      box.innerHTML = '<span class="neg">Preview error: ' + esc(e.message) + '</span>';
+    }
+  });
+
+  $("sel-enhanced-preset").addEventListener("change", () => {
+    const key = $("sel-enhanced-preset").value;
+    $("sel-enhanced-preset").value = "";
+    if (!key || !ENHANCED_PRESETS[key]) return;
+    openRuleEditor(-1, JSON.parse(JSON.stringify(ENHANCED_PRESETS[key])));
+  });
+
+  function renderEnhancedEvents(events) {
+    const el = $("enhanced-events-container");
+    if (!events || events.length === 0) {
+      el.innerHTML = '<div class="empty-state">No auto-favourite matches recorded this session yet.</div>';
+      return;
+    }
+    let html = '<table class="data-table"><thead><tr><th>Time</th><th>Item</th><th>iLvl</th><th>Category</th><th>Matched Rule</th><th>Action</th></tr></thead><tbody>';
+    for (const ev of events) {
+      const rCls = "rarity-" + (ev.rarity || "Standard");
+      const badge = ev.dryRun ? '<span class="muted">Dry Run</span>' : '<span class="pos">Favourited</span>';
+      html += "<tr>"
+        + '<td class="mono muted">' + esc(ev.timestamp || "") + "</td>"
+        + '<td class="' + esc(rCls) + '">' + esc(ev.displayName || "") + "</td>"
+        + '<td class="mono">' + esc(ev.itemLevel ?? "") + "</td>"
+        + "<td>" + esc(ev.category || "") + "</td>"
+        + "<td>" + esc(ev.ruleName || "") + "</td>"
+        + "<td>" + badge + "</td>"
+        + "</tr>";
+    }
+    html += "</tbody></table>";
+    el.innerHTML = html;
+  }
+
+  async function saveEnhancedConfig() {
+    try {
+      const payload = {
+        enabled: $("chk-autofav-enabled").checked,
+        armoryOnly: $("chk-autofav-armory").checked,
+        dryRun: $("chk-autofav-dryrun").checked,
+        scanOnLoad: $("chk-autofav-scanload").checked,
+        verboseLog: $("chk-autofav-verbose").checked
+      };
+      const resp = await fetch("/api/enhanced/autofav/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        showToast("EchoEnhanced settings updated.", false);
+      } else {
+        showToast("Failed to update settings: " + (data.error || "Unknown error"), true);
+      }
+    } catch (e) {
+      showToast("Error updating settings: " + e.message, true);
+    }
+  }
+
+  ["chk-autofav-enabled", "chk-autofav-armory", "chk-autofav-dryrun", "chk-autofav-scanload", "chk-autofav-verbose"].forEach((id) => {
+    $(id).addEventListener("change", saveEnhancedConfig);
+  });
+
+  $("btn-enhanced-refresh").addEventListener("click", () => fetchEnhancedStatus(true));
+
+  $("btn-enhanced-save-rules").addEventListener("click", async () => {
+    try {
+      const raw = $("enhanced-rules-editor").value;
+      const parsed = JSON.parse(raw);
+      enhancedRules = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.rules) ? parsed.rules : []);
+      await persistEnhancedRules("Saved & reloaded " + enhancedRules.length + " Auto-Favorite rule(s).");
+    } catch (e) {
+      showToast("Invalid JSON: " + e.message, true);
+    }
+  });
+
+  $("btn-enhanced-scan").addEventListener("click", async () => {
+    try {
+      const resp = await fetch("/api/enhanced/autofav/scan", { method: "POST" });
+      const data = await resp.json();
+      if (data.ok) {
+        const mode = data.dryRun ? " (Dry Run)" : "";
+        const detail = (data.itemsScanned != null)
+          ? " — " + data.itemsScanned + " items across " + data.inventoriesScanned + " inventories, " + data.alreadyFavourited + " already favourited"
+          : "";
+        showToast("Scan complete: " + data.matched + " matched" + detail + mode + ".", false);
+        fetchEnhancedStatus(false);
+      } else {
+        showToast("Scan failed: " + (data.error || "Unknown error"), true);
+      }
+    } catch (e) {
+      showToast("Scan error: " + e.message, true);
+    }
+  });
+
   // Boot
   fetchState();
   fetchHistory();
+  fetchEnhancedStatus(false);
   connectSSE();
   historyTimer = setInterval(fetchHistory, 30000);
 })();

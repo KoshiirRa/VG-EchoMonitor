@@ -191,6 +191,7 @@ namespace EchoMonitor
         public string Name { get; set; } = string.Empty;
         public string Rarity { get; set; } = string.Empty;
         public int ItemLevel { get; set; }
+        public string Size { get; set; } = string.Empty;
         public string EquipmentType { get; set; } = string.Empty;
         public int Gained { get; set; }
         public List<string> Substats { get; set; } = new List<string>();
@@ -308,6 +309,12 @@ namespace EchoMonitor
         public List<AlertItem> Items { get; set; } = new List<AlertItem>();
     }
 
+    public sealed class MissionBoardEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public List<string> Tags { get; set; } = new List<string>();
+    }
+
     public sealed class MissionLogEntry
     {
         public string Timestamp { get; set; } = string.Empty;
@@ -316,6 +323,10 @@ namespace EchoMonitor
         public string GameplayType { get; set; } = string.Empty;
         public bool IsStory { get; set; }
         public string Reason { get; set; } = string.Empty;
+        public string StationName { get; set; } = string.Empty;
+        public string SystemName { get; set; } = string.Empty;
+        public string SectorName { get; set; } = string.Empty;
+        public List<MissionBoardEntry> BoardMissions { get; set; } = new List<MissionBoardEntry>();
     }
 
     public sealed class OutpostStorageInfo
@@ -334,6 +345,24 @@ namespace EchoMonitor
         public string LargestStackItemName { get; set; } = string.Empty;
         public int LargestStackCount { get; set; }
         public double LargestStackM3 { get; set; }
+        public string State { get; set; } = string.Empty;
+        public bool HasStalledJob { get; set; }
+        public int ActiveJobCount { get; set; }
+        public List<OutpostJobInfo> Jobs { get; set; } = new List<OutpostJobInfo>();
+    }
+
+    public sealed class OutpostJobInfo
+    {
+        public string JobType { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public double ProgressPct { get; set; }
+        public int InitialAmount { get; set; }
+        public int RemainingAmount { get; set; }
+        public bool Repeat { get; set; }
+        public bool Stalled { get; set; }
+        public bool Paused { get; set; }
+        public bool AwaitingSupplies { get; set; }
+        public double TimeRemainingSec { get; set; } = -1.0;
     }
 
     public sealed class DepotMaterialEntry
@@ -372,12 +401,53 @@ namespace EchoMonitor
         public int RawBacklogTotal { get; set; }
         public int RawBacklogDelta { get; set; }
         public double RawBacklogRatePerHour { get; set; }
+        public int BacklogWindowMinutes { get; set; }
+        public int RawBacklogWindowDelta { get; set; }
+        public double RawBacklogWindowRatePerHour { get; set; }
         public List<DepotMaterialEntry> RawBacklogItems { get; set; } = new List<DepotMaterialEntry>();
         public int RefinedStockTotal { get; set; }
         public int RefinedStockDelta { get; set; }
         public double RefinedStockRatePerHour { get; set; }
+        public int RefinedStockWindowDelta { get; set; }
+        public double RefinedStockWindowRatePerHour { get; set; }
         public List<DepotMaterialEntry> RefinedStockItems { get; set; } = new List<DepotMaterialEntry>();
         public EmpireActivityDelta Activity { get; set; } = new EmpireActivityDelta();
+    }
+
+    public sealed class StationInventoryItem
+    {
+        public string ItemId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Group { get; set; } = "other"; // "raw", "refined", "other"
+        public string Category { get; set; } = string.Empty;
+        public int Count { get; set; }
+        public double SpaceM3 { get; set; }
+    }
+
+    public sealed class StationInventoryInfo
+    {
+        public string StationGuid { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string SystemName { get; set; } = string.Empty;
+        public string SectorName { get; set; } = string.Empty;
+        public bool IsActiveDepot { get; set; }
+        public bool IsHomeStation { get; set; }
+        public bool IsPlayerOutpost { get; set; }
+        public double SpaceUsed { get; set; }
+        public double Capacity { get; set; }
+        public double FillPct { get; set; }
+        public int TotalItemCount { get; set; }
+        public int RawCount { get; set; }
+        public int RefinedCount { get; set; }
+        public int OtherCount { get; set; }
+        public List<StationInventoryItem> Items { get; set; } = new List<StationInventoryItem>();
+    }
+
+    public sealed class DepotInventoryResponse
+    {
+        public bool InGame { get; set; }
+        public int StationCount { get; set; }
+        public List<StationInventoryInfo> Stations { get; set; } = new List<StationInventoryInfo>();
     }
 
     public sealed class LiveTelemetry

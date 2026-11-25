@@ -570,10 +570,15 @@ namespace EchoMonitor
             sb.Append(",\"rawBacklogTotal\":"); sb.Append(e.RawBacklogTotal.ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"rawBacklogDelta\":"); sb.Append(e.RawBacklogDelta.ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"rawBacklogRatePerHour\":"); AppendDouble(sb, e.RawBacklogRatePerHour);
+            sb.Append(",\"backlogWindowMinutes\":"); sb.Append(e.BacklogWindowMinutes.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"rawBacklogWindowDelta\":"); sb.Append(e.RawBacklogWindowDelta.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"rawBacklogWindowRatePerHour\":"); AppendDouble(sb, e.RawBacklogWindowRatePerHour);
             sb.Append(",\"rawBacklogItems\":"); AppendDepotMaterialList(sb, e.RawBacklogItems);
             sb.Append(",\"refinedStockTotal\":"); sb.Append(e.RefinedStockTotal.ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"refinedStockDelta\":"); sb.Append(e.RefinedStockDelta.ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"refinedStockRatePerHour\":"); AppendDouble(sb, e.RefinedStockRatePerHour);
+            sb.Append(",\"refinedStockWindowDelta\":"); sb.Append(e.RefinedStockWindowDelta.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"refinedStockWindowRatePerHour\":"); AppendDouble(sb, e.RefinedStockWindowRatePerHour);
             sb.Append(",\"refinedStockItems\":"); AppendDepotMaterialList(sb, e.RefinedStockItems);
             sb.Append(",\"activity\":");
             var act = e.Activity ?? new EmpireActivityDelta();
@@ -611,6 +616,56 @@ namespace EchoMonitor
                 }
             }
             sb.Append(']');
+        }
+
+        public static string SerializeDepotInventory(DepotInventoryResponse resp)
+        {
+            if (resp == null) return "{\"inGame\":false,\"stationCount\":0,\"stations\":[]}";
+            var sb = new StringBuilder(4096);
+            sb.Append("{\"inGame\":"); sb.Append(resp.InGame ? "true" : "false");
+            sb.Append(",\"stationCount\":"); sb.Append(resp.StationCount.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"stations\":[");
+            if (resp.Stations != null)
+            {
+                for (int i = 0; i < resp.Stations.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    var st = resp.Stations[i];
+                    sb.Append("{\"stationGuid\":"); AppendString(sb, st.StationGuid);
+                    sb.Append(",\"name\":"); AppendString(sb, st.Name);
+                    sb.Append(",\"systemName\":"); AppendString(sb, st.SystemName);
+                    sb.Append(",\"sectorName\":"); AppendString(sb, st.SectorName);
+                    sb.Append(",\"isActiveDepot\":"); sb.Append(st.IsActiveDepot ? "true" : "false");
+                    sb.Append(",\"isHomeStation\":"); sb.Append(st.IsHomeStation ? "true" : "false");
+                    sb.Append(",\"isPlayerOutpost\":"); sb.Append(st.IsPlayerOutpost ? "true" : "false");
+                    sb.Append(",\"spaceUsed\":"); AppendDouble(sb, st.SpaceUsed);
+                    sb.Append(",\"capacity\":"); AppendDouble(sb, st.Capacity);
+                    sb.Append(",\"fillPct\":"); AppendDouble(sb, st.FillPct);
+                    sb.Append(",\"totalItemCount\":"); sb.Append(st.TotalItemCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"rawCount\":"); sb.Append(st.RawCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"refinedCount\":"); sb.Append(st.RefinedCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"otherCount\":"); sb.Append(st.OtherCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"items\":[");
+                    if (st.Items != null)
+                    {
+                        for (int j = 0; j < st.Items.Count; j++)
+                        {
+                            if (j > 0) sb.Append(',');
+                            var it = st.Items[j];
+                            sb.Append("{\"itemId\":"); AppendString(sb, it.ItemId);
+                            sb.Append(",\"name\":"); AppendString(sb, it.Name);
+                            sb.Append(",\"group\":"); AppendString(sb, it.Group);
+                            sb.Append(",\"category\":"); AppendString(sb, it.Category);
+                            sb.Append(",\"count\":"); sb.Append(it.Count.ToString(CultureInfo.InvariantCulture));
+                            sb.Append(",\"spaceM3\":"); AppendDouble(sb, it.SpaceM3);
+                            sb.Append('}');
+                        }
+                    }
+                    sb.Append("]}");
+                }
+            }
+            sb.Append("]}");
+            return sb.ToString();
         }
 
         private static void AppendSnapshotSummary(StringBuilder sb, PlayerSnapshot s)
@@ -851,6 +906,22 @@ namespace EchoMonitor
             sb.Append(",\"gameplayType\":"); AppendString(sb, e.GameplayType);
             sb.Append(",\"isStory\":"); AppendBool(sb, e.IsStory);
             sb.Append(",\"reason\":"); AppendString(sb, e.Reason);
+            sb.Append(",\"stationName\":"); AppendString(sb, e.StationName);
+            sb.Append(",\"systemName\":"); AppendString(sb, e.SystemName);
+            sb.Append(",\"sectorName\":"); AppendString(sb, e.SectorName);
+            if (e.BoardMissions != null && e.BoardMissions.Count > 0)
+            {
+                sb.Append(",\"boardMissions\":[");
+                for (int i = 0; i < e.BoardMissions.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    var bm = e.BoardMissions[i];
+                    sb.Append("{\"name\":"); AppendString(sb, bm.Name);
+                    sb.Append(",\"tags\":"); AppendStringList(sb, bm.Tags);
+                    sb.Append('}');
+                }
+                sb.Append(']');
+            }
             sb.Append('}');
         }
 
@@ -858,15 +929,41 @@ namespace EchoMonitor
         {
             var root = Parse(json) as Dictionary<string, object>;
             if (root == null) return null;
-            return new MissionLogEntry
+            var entry = new MissionLogEntry
             {
                 Timestamp = GetString(root, "timestamp", string.Empty),
                 Event = GetString(root, "event", string.Empty),
                 MissionName = GetString(root, "missionName", string.Empty),
                 GameplayType = GetString(root, "gameplayType", string.Empty),
                 IsStory = root.TryGetValue("isStory", out var v) && v is bool b && b,
-                Reason = GetString(root, "reason", string.Empty)
+                Reason = GetString(root, "reason", string.Empty),
+                StationName = GetString(root, "stationName", string.Empty),
+                SystemName = GetString(root, "systemName", string.Empty),
+                SectorName = GetString(root, "sectorName", string.Empty)
             };
+            if (root.TryGetValue("boardMissions", out var bmObj) && bmObj is List<object> bmList)
+            {
+                foreach (var item in bmList)
+                {
+                    if (item is Dictionary<string, object> d)
+                    {
+                        var bm = new MissionBoardEntry
+                        {
+                            Name = GetString(d, "name", string.Empty)
+                        };
+                        if (d.TryGetValue("tags", out var tObj) && tObj is List<object> tList)
+                        {
+                            foreach (var t in tList)
+                            {
+                                if (t is string ts && !string.IsNullOrEmpty(ts))
+                                    bm.Tags.Add(ts);
+                            }
+                        }
+                        entry.BoardMissions.Add(bm);
+                    }
+                }
+            }
+            return entry;
         }
 
         #region Minimal JSON Parser
