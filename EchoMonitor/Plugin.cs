@@ -306,13 +306,16 @@ namespace EchoMonitor
                     return;
                 }
 
+                int currentPid = Process.GetCurrentProcess().Id;
                 var psi = new ProcessStartInfo
                 {
                     FileName = exePath,
+                    Arguments = $"--parent-pid {currentPid}",
                     WorkingDirectory = Path.GetDirectoryName(exePath) ?? string.Empty,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.EnvironmentVariables["ECHOMONITOR_PARENT_PID"] = currentPid.ToString();
                 _botProcess = Process.Start(psi);
                 Log.LogInfo($"Auto-launched EchoMonitorBot from {exePath}");
             }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -46,7 +47,7 @@ public static class Program
     private static readonly Dictionary<(string Name, string Rarity, int ItemLevel, string StatsSig), int> SeenModuleCounts = new();
     private static readonly HashSet<string> SeenReadyBps = new(StringComparer.OrdinalIgnoreCase);
 
-    public static async Task<int> Main()
+    public static async Task<int> Main(string[] args)
     {
         try
         {
@@ -58,6 +59,8 @@ public static class Program
             return 1;
         }
 
+        int parentPid = ParseParentPid(args);
+
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -65,13 +68,18 @@ public static class Program
             cts.Cancel();
         };
 
+        if (parentPid > 0)
+        {
+            _ = WatchParentProcessAsync(parentPid, cts);
+        }
+
         using var api = new EchoMonitorClient(_config);
         using var discord = new DiscordGateway(_config);
         _api = api;
         _discord = discord;
         _discord.OnInteraction += HandleInteractionAsync;
 
-        Console.WriteLine($"[EchoMonitorBot] Starting (EchoMonitor={_config.EchoMonitorUrl}, Channel={_config.DiscordChannelId})");
+        Console.WriteLine($"[EchoMonitorBot] Starting (EchoMonitor={_config.EchoMonitorUrl}, Channel={_config.DiscordChannelId}{(parentPid > 0 ? $", ParentPid={parentPid}" : string.Empty)})");
 
         var tasks = new List<Task>
         {
@@ -82,8 +90,71 @@ public static class Program
         if (_config.DigestIntervalMinutes > 0)
             tasks.Add(RunDigestLoopAsync(cts.Token));
 
-        await Task.WhenAll(tasks);
+        try
+        {
+            var allTasks = Task.WhenAll(tasks);
+            await allTasks;
+        }
+        catch (OperationCanceledException) { }
         return 0;
+    }
+
+    private static int ParseParentPid(string[] args)
+    {
+        if (args != null)
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (string.Equals(args[i], "--parent-pid", StringComparison.OrdinalIgnoreCase) &&
+                    i + 1 < args.Length &&
+                    int.TryParse(args[i + 1], out int parsed) &&
+                    parsed > 0)
+                {
+                    return parsed;
+                }
+            }
+        }
+
+        string? envPid = Environment.GetEnvironmentVariable("ECHOMONITOR_PARENT_PID");
+        if (!string.IsNullOrWhiteSpace(envPid) && int.TryParse(envPid, out int fromEnv) && fromEnv > 0)
+        {
+            return fromEnv;
+        }
+
+        return 0;
+    }
+
+    private static async Task WatchParentProcessAsync(int parentPid, CancellationTokenSource cts)
+    {
+        try
+        {
+            using var parent = Process.GetProcessById(parentPid);
+            await parent.WaitForExitAsync(cts.Token);
+        }
+        catch (ArgumentException)
+        {
+            // Parent process already exited.
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[EchoMonitorBot] Parent watchdog warning: {ex.Message}");
+            return;
+        }
+
+        if (cts.IsCancellationRequested) return;
+
+        Console.WriteLine($"[EchoMonitorBot] Parent process {parentPid} exited; shutting down.");
+        try { await Task.Delay(1500, cts.Token); } catch (OperationCanceledException) { return; }
+
+        try { cts.Cancel(); } catch { }
+
+        // Force-exit fallback in case a network/gateway task hangs during cancellation.
+        await Task.Delay(3000);
+        Environment.Exit(0);
     }
 
     private static async Task RunSseLoopAsync(CancellationTokenSource cts)
