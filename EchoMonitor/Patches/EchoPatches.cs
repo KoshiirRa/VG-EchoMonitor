@@ -7,6 +7,7 @@ using HarmonyLib;
 using Source.Galaxy.POI;
 using Source.Galaxy.Trade;
 using Source.MissionSystem;
+using Source.Player;
 using Source.SpaceShip;
 using Source.Util;
 
@@ -174,6 +175,25 @@ namespace EchoMonitor.Patches
                     ? (Translation.Translate(reason) ?? reason)
                     : (reason ?? string.Empty);
 
+                string stationName = string.Empty;
+                string systemName = string.Empty;
+                string sectorName = string.Empty;
+                var gp = GamePlayer.current;
+                if (gp != null)
+                {
+                    var sys = gp.currentSystem;
+                    if (gp.currentPointOfInterest is SpaceStation st)
+                    {
+                        stationName = TranslateIfNeeded(st.name);
+                        if (sys == null) sys = st.system;
+                    }
+                    if (sys != null)
+                    {
+                        systemName = TranslateIfNeeded(sys.name);
+                        sectorName = TranslateIfNeeded(sys.sector?.name);
+                    }
+                }
+
                 OnMissionEvent.Invoke(new MissionLogEntry
                 {
                     Timestamp = DateTime.UtcNow.ToString("o"),
@@ -181,10 +201,19 @@ namespace EchoMonitor.Patches
                     MissionName = name,
                     GameplayType = mission.gameplayType.ToString(),
                     IsStory = !string.IsNullOrWhiteSpace(mission.storyId),
-                    Reason = translatedReason
+                    Reason = translatedReason,
+                    StationName = stationName,
+                    SystemName = systemName,
+                    SectorName = sectorName
                 });
             }
             catch { }
+        }
+
+        private static string TranslateIfNeeded(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return string.Empty;
+            return raw.StartsWith("@", StringComparison.Ordinal) ? (Translation.Translate(raw) ?? raw) : raw;
         }
 
         private static string ResolveItemName(InventoryItemType item)

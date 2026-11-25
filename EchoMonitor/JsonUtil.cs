@@ -560,30 +560,7 @@ namespace EchoMonitor
                     sb.Append(",\"largestStackItemName\":"); AppendString(sb, op.LargestStackItemName);
                     sb.Append(",\"largestStackCount\":"); sb.Append(op.LargestStackCount.ToString(CultureInfo.InvariantCulture));
                     sb.Append(",\"largestStackM3\":"); AppendDouble(sb, op.LargestStackM3);
-                    sb.Append(",\"state\":"); AppendString(sb, op.State);
-                    sb.Append(",\"hasStalledJob\":"); AppendBool(sb, op.HasStalledJob);
-                    sb.Append(",\"activeJobCount\":"); sb.Append(op.ActiveJobCount.ToString(CultureInfo.InvariantCulture));
-                    sb.Append(",\"jobs\":[");
-                    if (op.Jobs != null)
-                    {
-                        for (int j = 0; j < op.Jobs.Count; j++)
-                        {
-                            if (j > 0) sb.Append(',');
-                            var jb = op.Jobs[j];
-                            sb.Append("{\"jobType\":"); AppendString(sb, jb.JobType);
-                            sb.Append(",\"name\":"); AppendString(sb, jb.Name);
-                            sb.Append(",\"progressPct\":"); AppendDouble(sb, jb.ProgressPct);
-                            sb.Append(",\"initialAmount\":"); sb.Append(jb.InitialAmount.ToString(CultureInfo.InvariantCulture));
-                            sb.Append(",\"remainingAmount\":"); sb.Append(jb.RemainingAmount.ToString(CultureInfo.InvariantCulture));
-                            sb.Append(",\"repeat\":"); AppendBool(sb, jb.Repeat);
-                            sb.Append(",\"stalled\":"); AppendBool(sb, jb.Stalled);
-                            sb.Append(",\"paused\":"); AppendBool(sb, jb.Paused);
-                            sb.Append(",\"awaitingSupplies\":"); AppendBool(sb, jb.AwaitingSupplies);
-                            sb.Append(",\"timeRemainingSec\":"); AppendDouble(sb, jb.TimeRemainingSec);
-                            sb.Append('}');
-                        }
-                    }
-                    sb.Append("]}");
+                    sb.Append('}');
                 }
             }
             sb.Append("],\"depotCount\":"); sb.Append(e.DepotCount.ToString(CultureInfo.InvariantCulture));
@@ -593,10 +570,15 @@ namespace EchoMonitor
             sb.Append(",\"rawBacklogTotal\":"); sb.Append(e.RawBacklogTotal.ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"rawBacklogDelta\":"); sb.Append(e.RawBacklogDelta.ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"rawBacklogRatePerHour\":"); AppendDouble(sb, e.RawBacklogRatePerHour);
+            sb.Append(",\"backlogWindowMinutes\":"); sb.Append(e.BacklogWindowMinutes.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"rawBacklogWindowDelta\":"); sb.Append(e.RawBacklogWindowDelta.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"rawBacklogWindowRatePerHour\":"); AppendDouble(sb, e.RawBacklogWindowRatePerHour);
             sb.Append(",\"rawBacklogItems\":"); AppendDepotMaterialList(sb, e.RawBacklogItems);
             sb.Append(",\"refinedStockTotal\":"); sb.Append(e.RefinedStockTotal.ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"refinedStockDelta\":"); sb.Append(e.RefinedStockDelta.ToString(CultureInfo.InvariantCulture));
             sb.Append(",\"refinedStockRatePerHour\":"); AppendDouble(sb, e.RefinedStockRatePerHour);
+            sb.Append(",\"refinedStockWindowDelta\":"); sb.Append(e.RefinedStockWindowDelta.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"refinedStockWindowRatePerHour\":"); AppendDouble(sb, e.RefinedStockWindowRatePerHour);
             sb.Append(",\"refinedStockItems\":"); AppendDepotMaterialList(sb, e.RefinedStockItems);
             sb.Append(",\"activity\":");
             var act = e.Activity ?? new EmpireActivityDelta();
@@ -767,7 +749,6 @@ namespace EchoMonitor
                 sb.Append("{\"name\":"); AppendString(sb, m.Name);
                 sb.Append(",\"rarity\":"); AppendString(sb, m.Rarity);
                 sb.Append(",\"itemLevel\":"); sb.Append(m.ItemLevel.ToString(CultureInfo.InvariantCulture));
-                sb.Append(",\"size\":"); AppendString(sb, m.Size);
                 sb.Append(",\"equipmentType\":"); AppendString(sb, m.EquipmentType);
                 sb.Append(",\"gained\":"); sb.Append(m.Gained.ToString(CultureInfo.InvariantCulture));
                 sb.Append(",\"substats\":"); AppendStringList(sb, m.Substats);
@@ -925,6 +906,9 @@ namespace EchoMonitor
             sb.Append(",\"gameplayType\":"); AppendString(sb, e.GameplayType);
             sb.Append(",\"isStory\":"); AppendBool(sb, e.IsStory);
             sb.Append(",\"reason\":"); AppendString(sb, e.Reason);
+            sb.Append(",\"stationName\":"); AppendString(sb, e.StationName);
+            sb.Append(",\"systemName\":"); AppendString(sb, e.SystemName);
+            sb.Append(",\"sectorName\":"); AppendString(sb, e.SectorName);
             sb.Append('}');
         }
 
@@ -939,7 +923,10 @@ namespace EchoMonitor
                 MissionName = GetString(root, "missionName", string.Empty),
                 GameplayType = GetString(root, "gameplayType", string.Empty),
                 IsStory = root.TryGetValue("isStory", out var v) && v is bool b && b,
-                Reason = GetString(root, "reason", string.Empty)
+                Reason = GetString(root, "reason", string.Empty),
+                StationName = GetString(root, "stationName", string.Empty),
+                SystemName = GetString(root, "systemName", string.Empty),
+                SectorName = GetString(root, "sectorName", string.Empty)
             };
         }
 

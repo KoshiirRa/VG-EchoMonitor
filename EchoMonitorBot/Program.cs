@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -47,7 +46,7 @@ public static class Program
     private static readonly Dictionary<(string Name, string Rarity, int ItemLevel, string StatsSig), int> SeenModuleCounts = new();
     private static readonly HashSet<string> SeenReadyBps = new(StringComparer.OrdinalIgnoreCase);
 
-    public static async Task<int> Main(string[] args)
+    public static async Task<int> Main()
     {
         try
         {
@@ -59,8 +58,6 @@ public static class Program
             return 1;
         }
 
-        int parentPid = ParseParentPid(args);
-
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -68,18 +65,13 @@ public static class Program
             cts.Cancel();
         };
 
-        if (parentPid > 0)
-        {
-            _ = WatchParentProcessAsync(parentPid, cts);
-        }
-
         using var api = new EchoMonitorClient(_config);
         using var discord = new DiscordGateway(_config);
         _api = api;
         _discord = discord;
         _discord.OnInteraction += HandleInteractionAsync;
 
-        Console.WriteLine($"[EchoMonitorBot] Starting (EchoMonitor={_config.EchoMonitorUrl}, Channel={_config.DiscordChannelId}{(parentPid > 0 ? $", ParentPid={parentPid}" : string.Empty)})");
+        Console.WriteLine($"[EchoMonitorBot] Starting (EchoMonitor={_config.EchoMonitorUrl}, Channel={_config.DiscordChannelId})");
 
         var tasks = new List<Task>
         {
@@ -90,71 +82,8 @@ public static class Program
         if (_config.DigestIntervalMinutes > 0)
             tasks.Add(RunDigestLoopAsync(cts.Token));
 
-        try
-        {
-            var allTasks = Task.WhenAll(tasks);
-            await allTasks;
-        }
-        catch (OperationCanceledException) { }
+        await Task.WhenAll(tasks);
         return 0;
-    }
-
-    private static int ParseParentPid(string[] args)
-    {
-        if (args != null)
-        {
-            for (int i = 0; i < args.Length; i++)
-            {
-                if (string.Equals(args[i], "--parent-pid", StringComparison.OrdinalIgnoreCase) &&
-                    i + 1 < args.Length &&
-                    int.TryParse(args[i + 1], out int parsed) &&
-                    parsed > 0)
-                {
-                    return parsed;
-                }
-            }
-        }
-
-        string? envPid = Environment.GetEnvironmentVariable("ECHOMONITOR_PARENT_PID");
-        if (!string.IsNullOrWhiteSpace(envPid) && int.TryParse(envPid, out int fromEnv) && fromEnv > 0)
-        {
-            return fromEnv;
-        }
-
-        return 0;
-    }
-
-    private static async Task WatchParentProcessAsync(int parentPid, CancellationTokenSource cts)
-    {
-        try
-        {
-            using var parent = Process.GetProcessById(parentPid);
-            await parent.WaitForExitAsync(cts.Token);
-        }
-        catch (ArgumentException)
-        {
-            // Parent process already exited.
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[EchoMonitorBot] Parent watchdog warning: {ex.Message}");
-            return;
-        }
-
-        if (cts.IsCancellationRequested) return;
-
-        Console.WriteLine($"[EchoMonitorBot] Parent process {parentPid} exited; shutting down.");
-        try { await Task.Delay(1500, cts.Token); } catch (OperationCanceledException) { return; }
-
-        try { cts.Cancel(); } catch { }
-
-        // Force-exit fallback in case a network/gateway task hangs during cancellation.
-        await Task.Delay(3000);
-        Environment.Exit(0);
     }
 
     private static async Task RunSseLoopAsync(CancellationTokenSource cts)
@@ -379,7 +308,7 @@ public static class Program
 
         if (hasMods)
         {
-            var newDrops = new List<(string Name, string Rarity, string Size, int ItemLevel, int Diff, List<string> Lines)>();
+            var newDrops = new List<(string Name, string Rarity, int ItemLevel, int Diff, List<string> Lines)>();
             foreach (var mod in newMods.EnumerateArray())
             {
                 string name = GetStr(mod, "name", "Unknown Module");
@@ -395,9 +324,7 @@ public static class Program
                     if (_config.RarityMeetsThreshold(rarity))
                     {
                         int diff = gained - prev;
-                        string size = GetStr(mod, "size");
-                        string meta = !string.IsNullOrEmpty(size) ? $"{size}, LVL {ilvl}" : $"LVL {ilvl}";
-                        var lines = new List<string> { $"**{name}** ({meta}) x{diff}" };
+                        var lines = new List<string> { $"**{name}** (iLvl {ilvl}) x{diff}" };
                         if (TryGetArr(mod, "substats", out var subs))
                         {
                             int count = 0;
@@ -426,7 +353,7 @@ public static class Program
                                     lines.Add($"• **{aName}**");
                             }
                         }
-                        newDrops.Add((name, rarity, size, ilvl, diff, lines));
+                        newDrops.Add((name, rarity, ilvl, diff, lines));
                     }
                 }
             }
@@ -439,8 +366,7 @@ public static class Program
                 };
                 foreach (var d in newDrops.Take(10))
                 {
-                    string meta = !string.IsNullOrEmpty(d.Size) ? $"{d.Size}, LVL {d.ItemLevel}" : $"LVL {d.ItemLevel}";
-                    summaryLines.Add($"- **[{d.Rarity}] {d.Name}** ({meta}) x{d.Diff}");
+                    summaryLines.Add($"- **[{d.Rarity}] {d.Name}** (iLvl {d.ItemLevel}) x{d.Diff}");
                 }
                 if (newDrops.Count > 10)
                     summaryLines.Add($"*...and {newDrops.Count - 10} more*");
@@ -483,6 +409,14 @@ public static class Program
     private static async Task RunDigestLoopAsync(CancellationToken ct)
     {
         var interval = TimeSpan.FromMinutes(_config.DigestIntervalMinutes);
+        string windowLabel = _config.DigestIntervalMinutes % 60 == 0
+            ? $"last {_config.DigestIntervalMinutes / 60}h"
+            : $"last {_config.DigestIntervalMinutes}m";
+
+        string? lastSessionKey = null;
+        int? prevRawTotal = null;
+        int? prevRefTotal = null;
+
         while (!ct.IsCancellationRequested)
         {
             try
@@ -498,7 +432,27 @@ public static class Program
             lock (StateLock) { snap = _latestState; }
             if (_isOnline && snap.HasValue && GetBool(snap.Value, "inGame"))
             {
-                await _discord.PostChannelMessageAsync(BuildDigestEmbed(snap.Value), ct: ct);
+                var state = snap.Value;
+                string sessionKey = $"{GetStr(state, "saveId")}|{GetStr(state, "sessionStartedAt")}";
+                if (!string.Equals(sessionKey, lastSessionKey, StringComparison.Ordinal))
+                {
+                    lastSessionKey = sessionKey;
+                    prevRawTotal = null;
+                    prevRefTotal = null;
+                }
+
+                (int RawTotal, int RefTotal, string WindowLabel)? prevEmpire =
+                    prevRawTotal.HasValue && prevRefTotal.HasValue
+                        ? (prevRawTotal.Value, prevRefTotal.Value, windowLabel)
+                        : null;
+
+                await _discord.PostChannelMessageAsync(BuildDigestEmbed(state, prevEmpire), ct: ct);
+
+                if (TryGetObj(state, "empire", out var empire))
+                {
+                    prevRawTotal = GetInt(empire, "rawBacklogTotal");
+                    prevRefTotal = GetInt(empire, "refinedStockTotal");
+                }
             }
         }
     }
@@ -802,7 +756,7 @@ public static class Program
                 int g = Math.Max(1, GetInt(m, "gained"));
                 byRarity[r] = byRarity.GetValueOrDefault(r, 0) + g;
                 if (r.Equals("Exotic", StringComparison.OrdinalIgnoreCase) || r.Equals("Legendary", StringComparison.OrdinalIgnoreCase))
-                    highlights.Add($"- **[{r}]** {GetStr(m, "name", "Unknown")} (LVL {GetInt(m, "itemLevel")}) x{g}");
+                    highlights.Add($"- **[{r}]** {GetStr(m, "name", "Unknown")} (iLvl {GetInt(m, "itemLevel")}) x{g}");
             }
         }
 
@@ -831,7 +785,7 @@ public static class Program
             foreach (var c in crates.EnumerateArray())
             {
                 if (cCount++ >= 8) break;
-                lines.Add($"- **[{GetStr(c, "rarity", "Standard")}]** {GetStr(c, "name", "Crate")} (LVL {GetInt(c, "itemLevel")}) +{GetInt(c, "gained")}");
+                lines.Add($"- **[{GetStr(c, "rarity", "Standard")}]** {GetStr(c, "name", "Crate")} (iLvl {GetInt(c, "itemLevel")}) +{GetInt(c, "gained")}");
             }
             fields.Add(MakeField($"Locked Crates (+{cratesTotal})", string.Join("\n", lines), false));
         }
@@ -882,7 +836,7 @@ public static class Program
         return MakeEmbed("Recent Mission Log (Last 10)", Truncate(string.Join("\n", lines), 4000), 0x0EA5E9);
     }
 
-    private static JsonObject BuildDigestEmbed(JsonElement state)
+    private static JsonObject BuildDigestEmbed(JsonElement state, (int RawTotal, int RefTotal, string WindowLabel)? prevEmpire = null)
     {
         TryGetObj(state, "echo", out var echo);
         TryGetObj(state, "current", out var current);
@@ -908,7 +862,7 @@ public static class Program
 
         if (TryGetObj(state, "empire", out var empire))
         {
-            fields.Add(BuildEmpireSummaryField(empire));
+            fields.Add(BuildEmpireSummaryField(empire, prevEmpire));
         }
 
         return MakeEmbed(
@@ -918,7 +872,7 @@ public static class Program
             fields);
     }
 
-    private static JsonObject BuildEmpireSummaryField(JsonElement empire)
+    private static JsonObject BuildEmpireSummaryField(JsonElement empire, (int RawTotal, int RefTotal, string WindowLabel)? prevEmpire = null)
     {
         TryGetObj(empire, "activity", out var act);
         long refined = GetLong(act, "refinedTotal");
@@ -926,11 +880,17 @@ public static class Program
         long produced = GetLong(act, "outpostProducedTotal");
 
         int rawTotal = GetInt(empire, "rawBacklogTotal");
-        int rawDelta = GetInt(empire, "rawBacklogDelta");
+        int rawDelta = prevEmpire.HasValue
+            ? rawTotal - prevEmpire.Value.RawTotal
+            : GetInt(empire, "rawBacklogDelta");
         string rawTrend = rawDelta > 0 ? "GROWING" : (rawDelta < 0 ? "DRAINING" : "STEADY");
 
         int refTotal = GetInt(empire, "refinedStockTotal");
-        int refDelta = GetInt(empire, "refinedStockDelta");
+        int refDelta = prevEmpire.HasValue
+            ? refTotal - prevEmpire.Value.RefTotal
+            : GetInt(empire, "refinedStockDelta");
+
+        string scopeSuffix = prevEmpire.HasValue ? $" {prevEmpire.Value.WindowLabel}" : "";
 
         int fullOutposts = 0;
         int totalOutposts = 0;
@@ -947,7 +907,7 @@ public static class Program
         return MakeField(
             "Empire & Refining",
             $"Refined: **{FmtNum(refined)}** | Trade Profit: `{FmtSigned(tradeProfit)}` | Produced: **{FmtNum(produced)}**{opWarn}\n" +
-            $"Raw Backlog: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`, {rawTrend}) | Refined Stock: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`)",
+            $"Raw Backlog: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`{scopeSuffix}, {rawTrend}) | Refined Stock: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`{scopeSuffix})",
             false);
     }
 
@@ -973,49 +933,31 @@ public static class Program
             int n = 0;
             foreach (var op in outposts.EnumerateArray())
             {
-                if (n++ >= 6) break;
+                if (n++ >= 8) break;
                 double pct = GetDbl(op, "fillPct");
-                string opState = GetStr(op, "state", "Idle");
-                bool stalled = GetBool(op, "hasStalledJob");
-                string icon = (pct >= 95.0 || opState == "StorageFull" || opState == "Raided") ? "🔴"
-                    : (stalled || opState == "MissingMaterials" || pct >= 80.0) ? "🟠"
-                    : opState == "Upgrading" ? "🔵"
-                    : opState == "Working" ? "🟢" : "⚪";
-
-                string jobSummary = "";
-                if (TryGetArr(op, "jobs", out var jobs) && jobs.GetArrayLength() > 0)
-                {
-                    var jParts = new List<string>();
-                    int jn = 0;
-                    foreach (var jb in jobs.EnumerateArray())
-                    {
-                        if (jn++ >= 2) break;
-                        string jName = GetStr(jb, "name", GetStr(jb, "jobType", "Job"));
-                        double jPct = GetDbl(jb, "progressPct");
-                        string jFlag = GetBool(jb, "stalled") ? " [STALLED]"
-                            : GetBool(jb, "paused") ? " [PAUSED]"
-                            : GetBool(jb, "awaitingSupplies") ? " [SUPPLIES]" : "";
-                        int rem = GetInt(jb, "remainingAmount");
-                        string qty = rem > 1 ? $" x{FmtNum(rem)}" : "";
-                        jParts.Add($"{jName}{qty} ({jPct:0}%){jFlag}");
-                    }
-                    if (jobs.GetArrayLength() > 2)
-                        jParts.Add($"+{jobs.GetArrayLength() - 2} more");
-                    jobSummary = $" | {string.Join(", ", jParts)}";
-                }
-
-                lines.Add($"{icon} **{GetStr(op, "name")}** [{opState}] — **{pct:0.0}%**{jobSummary}");
+                string icon = pct >= 95.0 ? "🔴" : (pct >= 80.0 ? "🟠" : "🟢");
+                string stack = GetInt(op, "largestStackCount") > 0
+                    ? $" — top: {FmtNum(GetInt(op, "largestStackCount"))}x {GetStr(op, "largestStackItemName")}"
+                    : "";
+                lines.Add($"{icon} **{GetStr(op, "name")}** ({GetStr(op, "systemName")}): **{pct:0.0}%**{stack}");
             }
-            string fieldVal = string.Join("\n", lines);
-            if (fieldVal.Length > 1020) fieldVal = fieldVal.Substring(0, 1017) + "...";
-            fields.Add(MakeField($"Outposts & Jobs ({outposts.GetArrayLength()})", fieldVal, false));
+            fields.Add(MakeField($"Outpost Storage ({outposts.GetArrayLength()})", string.Join("\n", lines), false));
         }
+
+        int winMins = GetInt(empire, "backlogWindowMinutes");
+        string winLabel = winMins >= 60 ? "last 1h" : $"last {winMins}m";
 
         int rawTotal = GetInt(empire, "rawBacklogTotal");
         int rawDelta = GetInt(empire, "rawBacklogDelta");
         double rawRate = GetDbl(empire, "rawBacklogRatePerHour");
-        string rawTrend = rawDelta > 0 ? "GROWING" : (rawDelta < 0 ? "DRAINING" : "STEADY");
-        var rawLines = new List<string> { $"Total: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`, {rawRate:+0.0;-0.0;0.0}/hr — **{rawTrend}**)" };
+        int rawWinDelta = GetInt(empire, "rawBacklogWindowDelta");
+        double rawWinRate = GetDbl(empire, "rawBacklogWindowRatePerHour");
+        int rawTrendDelta = winMins > 0 ? rawWinDelta : rawDelta;
+        string rawTrend = rawTrendDelta > 0 ? "GROWING" : (rawTrendDelta < 0 ? "DRAINING" : "STEADY");
+        string rawHeader = winMins > 0
+            ? $"Total: **{FmtNum(rawTotal)}** (`{FmtSigned(rawWinDelta)}` {winLabel}, {rawWinRate:+0.0;-0.0;0.0}/hr — **{rawTrend}** | session `{FmtSigned(rawDelta)}`)"
+            : $"Total: **{FmtNum(rawTotal)}** (`{FmtSigned(rawDelta)}`, {rawRate:+0.0;-0.0;0.0}/hr — **{rawTrend}**)";
+        var rawLines = new List<string> { rawHeader };
         if (TryGetArr(empire, "rawBacklogItems", out var rawItems))
         {
             int n = 0;
@@ -1030,7 +972,12 @@ public static class Program
         int refTotal = GetInt(empire, "refinedStockTotal");
         int refDelta = GetInt(empire, "refinedStockDelta");
         double refRate = GetDbl(empire, "refinedStockRatePerHour");
-        var refLines = new List<string> { $"Total: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`, {refRate:+0.0;-0.0;0.0}/hr)" };
+        int refWinDelta = GetInt(empire, "refinedStockWindowDelta");
+        double refWinRate = GetDbl(empire, "refinedStockWindowRatePerHour");
+        string refHeader = winMins > 0
+            ? $"Total: **{FmtNum(refTotal)}** (`{FmtSigned(refWinDelta)}` {winLabel}, {refWinRate:+0.0;-0.0;0.0}/hr | session `{FmtSigned(refDelta)}`)"
+            : $"Total: **{FmtNum(refTotal)}** (`{FmtSigned(refDelta)}`, {refRate:+0.0;-0.0;0.0}/hr)";
+        var refLines = new List<string> { refHeader };
         if (TryGetArr(empire, "refinedStockItems", out var refItems))
         {
             int n = 0;
@@ -1250,7 +1197,6 @@ public static class Program
 
         return MakeEmbed(title, desc, 0x38BDF8, fields);
     }
-
 
     private static JsonObject MakeEmbed(string title, string? description, int color, JsonArray? fields = null)
     {
