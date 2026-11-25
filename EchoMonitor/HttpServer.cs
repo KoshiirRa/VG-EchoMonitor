@@ -17,6 +17,7 @@ namespace EchoMonitor
         private readonly Func<string> _getStateJson;
         private readonly Func<string> _getHistoryJson;
         private readonly Func<string> _getMissionLogJson;
+        private readonly Func<string> _getDepotsJson;
         private readonly Func<string> _resetSessionJson;
         private readonly Func<string> _warpSafeStationJson;
         private readonly Func<string> _resetEchoJson;
@@ -37,6 +38,7 @@ namespace EchoMonitor
             Func<string> getStateJson,
             Func<string> getHistoryJson,
             Func<string> getMissionLogJson,
+            Func<string> getDepotsJson,
             Func<string> resetSessionJson,
             Func<string> warpSafeStationJson,
             Func<string> resetEchoJson,
@@ -50,6 +52,7 @@ namespace EchoMonitor
             _getStateJson = getStateJson;
             _getHistoryJson = getHistoryJson;
             _getMissionLogJson = getMissionLogJson;
+            _getDepotsJson = getDepotsJson;
             _resetSessionJson = resetSessionJson;
             _warpSafeStationJson = warpSafeStationJson;
             _resetEchoJson = resetEchoJson;
@@ -216,6 +219,13 @@ namespace EchoMonitor
                     if (path.Equals("/api/missions/log", StringComparison.OrdinalIgnoreCase))
                     {
                         string json = _getMissionLogJson();
+                        WriteJson(resp, 200, json);
+                        return;
+                    }
+
+                    if (path.Equals("/api/depots", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string json = _getDepotsJson();
                         WriteJson(resp, 200, json);
                         return;
                     }

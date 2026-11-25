@@ -1275,6 +1275,28 @@
         <span id="empire-refined-badge" class="mono neu"></span>
       </div>
       <div id="empire-refined-container"></div>
+
+      <div class="section-heading" style="margin-top:16px">
+        <span>Station &amp; Depot Inventory by Location</span>
+        <span id="empire-depots-badge" class="mono neu"></span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+        <input id="depot-filter-location" type="text" placeholder="Filter station / system / sector..." style="flex:1;min-width:180px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px" />
+        <input id="depot-filter-search" type="text" placeholder="Search item..." style="flex:1;min-width:150px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px" />
+        <select id="depot-filter-group" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:6px;font-size:12px">
+          <option value="all">All Categories</option>
+          <option value="raw">Raw (Ores / Crystals / Salvage)</option>
+          <option value="refined">Refined Products</option>
+          <option value="other">Other</option>
+        </select>
+        <select id="depot-filter-sort" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:6px;font-size:12px">
+          <option value="count">Sort: Quantity</option>
+          <option value="volume">Sort: Volume (m³)</option>
+          <option value="name">Sort: Name (A–Z)</option>
+        </select>
+        <button id="depot-refresh-btn" class="btn" style="padding:6px 12px;font-size:12px">Refresh</button>
+      </div>
+      <div id="empire-depots-container"><div class="empty-state">Click Refresh to load per-station inventories.</div></div>
     </div>
 
     <!-- Tab 3: Faction Rep -->
@@ -2021,7 +2043,132 @@
     }).join("");
     $("empire-refined-container").innerHTML =
       '<table class="data-table"><thead><tr><th>Refined Product</th><th style="text-align:right">Depot Stock</th><th style="text-align:right">Session Δ</th><th style="text-align:right">Rate</th></tr></thead><tbody>' + rows + '</tbody></table>';
+
+    if (!window._depotsLoadedOnce) {
+      window._depotsLoadedOnce = true;
+      loadDepotInventories();
+    }
   }
+
+  let _cachedDepotData = null;
+
+  async function loadDepotInventories() {
+    const badge = $("empire-depots-badge");
+    const container = $("empire-depots-container");
+    if (badge) badge.textContent = "Loading...";
+    try {
+      const res = await fetch("/api/depots");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      _cachedDepotData = await res.json();
+      renderDepotInventories();
+    } catch (err) {
+      if (badge) badge.textContent = "Error";
+      if (container) container.innerHTML = '<div class="empty-state">Failed to load station inventories: ' + esc(String(err)) + '</div>';
+    }
+  }
+
+  function renderDepotInventories() {
+    const badge = $("empire-depots-badge");
+    const container = $("empire-depots-container");
+    if (!container) return;
+    const data = _cachedDepotData;
+    if (!data || !data.inGame) {
+      if (badge) badge.textContent = "";
+      container.innerHTML = '<div class="empty-state">Not currently in game.</div>';
+      return;
+    }
+
+    const locQ = ($("depot-filter-location")?.value || "").trim().toLowerCase();
+    const itemQ = ($("depot-filter-search")?.value || "").trim().toLowerCase();
+    const grpFilter = $("depot-filter-group")?.value || "all";
+    const sortBy = $("depot-filter-sort")?.value || "count";
+
+    const stations = Array.isArray(data.stations) ? data.stations : [];
+    const filteredStations = [];
+    let totalMatchingUnits = 0;
+
+    for (const st of stations) {
+      if (locQ) {
+        const hay = ((st.name || "") + " " + (st.systemName || "") + " " + (st.sectorName || "")).toLowerCase();
+        if (!hay.includes(locQ)) continue;
+      }
+      const rawItems = Array.isArray(st.items) ? st.items : [];
+      const items = rawItems.filter((it) => {
+        if (grpFilter !== "all" && (it.group || "other") !== grpFilter) return false;
+        if (itemQ && !(it.name || "").toLowerCase().includes(itemQ)) return false;
+        return true;
+      });
+      if ((itemQ || grpFilter !== "all") && items.length === 0) continue;
+
+      items.sort((a, b) => {
+        if (sortBy === "volume") return Number(b.spaceM3 || 0) - Number(a.spaceM3 || 0);
+        if (sortBy === "name") return String(a.name || "").localeCompare(String(b.name || ""));
+        return Number(b.count || 0) - Number(a.count || 0);
+      });
+
+      const stationUnits = items.reduce((s, it) => s + Number(it.count || 0), 0);
+      totalMatchingUnits += stationUnits;
+      filteredStations.push({ st, items, stationUnits });
+    }
+
+    if (badge) {
+      badge.textContent = filteredStations.length + " station(s) — " + fmtNum(totalMatchingUnits) + " units";
+    }
+
+    if (!filteredStations.length) {
+      container.innerHTML = '<div class="empty-state">No stations or items match the current filter.</div>';
+      return;
+    }
+
+    const autoOpen = filteredStations.length <= 2 || Boolean(locQ) || Boolean(itemQ);
+    container.innerHTML = filteredStations.map(({ st, items, stationUnits }) => {
+      const tags = [];
+      if (st.isHomeStation) tags.push('<span class="badge" style="background:rgba(56,189,248,0.18);color:#38bdf8;margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px">Home</span>');
+      if (st.isActiveDepot) tags.push('<span class="badge" style="background:rgba(34,197,94,0.18);color:#4ade80;margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px">Depot</span>');
+      if (st.isPlayerOutpost) tags.push('<span class="badge" style="background:rgba(168,85,247,0.18);color:#c084fc;margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px">Outpost</span>');
+
+      const locText = [st.systemName, st.sectorName].filter(Boolean).join(" • ");
+      const pct = Number(st.fillPct || 0).toFixed(1);
+      const rows = items.length
+        ? items.map((it) => {
+            const grpColor = it.group === "raw" ? "#f59e0b" : (it.group === "refined" ? "#38bdf8" : "#94a3b8");
+            return '<tr>' +
+              '<td>' + esc(it.name) + ' <span class="neu" style="font-size:11px">(' + esc(it.category) + ')</span></td>' +
+              '<td style="text-align:center"><span style="font-size:10px;text-transform:uppercase;color:' + grpColor + '">' + esc(it.group) + '</span></td>' +
+              '<td class="mono" style="text-align:right">' + fmtNum(it.count) + '</td>' +
+              '<td class="mono neu" style="text-align:right">' + Number(it.spaceM3 || 0).toFixed(1) + ' m³</td>' +
+            '</tr>';
+          }).join("")
+        : '<tr><td colspan="4" class="neu" style="text-align:center;padding:8px">Empty storage</td></tr>';
+
+      return '<details' + (autoOpen ? ' open' : '') + ' style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;padding:8px 12px">' +
+        '<summary style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;list-style:none">' +
+          '<div><strong>' + esc(st.name || "Station") + '</strong>' + tags.join("") +
+            (locText ? ' <span class="neu" style="font-size:11px;margin-left:6px">' + esc(locText) + '</span>' : '') +
+          '</div>' +
+          '<div class="mono" style="font-size:12px">' +
+            '<span>' + pct + '%</span> <span class="neu">(' + fmtNum(Math.round(st.spaceUsed || 0)) + '/' + fmtNum(Math.round(st.capacity || 0)) + ' m³ • ' + fmtNum(stationUnits) + ' units)</span>' +
+          '</div>' +
+        '</summary>' +
+        '<div style="margin-top:8px">' +
+          '<table class="data-table"><thead><tr><th>Item</th><th style="text-align:center">Group</th><th style="text-align:right">Qty</th><th style="text-align:right">Volume</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '</div>' +
+      '</details>';
+    }).join("");
+  }
+
+  ["depot-filter-location", "depot-filter-search"].forEach((id) => {
+    const el = $(id);
+    if (el) el.addEventListener("input", renderDepotInventories);
+  });
+  ["depot-filter-group", "depot-filter-sort"].forEach((id) => {
+    const el = $(id);
+    if (el) el.addEventListener("change", renderDepotInventories);
+  });
+  if ($("depot-refresh-btn")) {
+    $("depot-refresh-btn").addEventListener("click", loadDepotInventories);
+  }
+
 
   function renderRank(key, val, delta) {
     $("rank-" + key).textContent = fmtNum(val);

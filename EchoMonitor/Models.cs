@@ -399,6 +399,42 @@ namespace EchoMonitor
         public EmpireActivityDelta Activity { get; set; } = new EmpireActivityDelta();
     }
 
+    public sealed class StationInventoryItem
+    {
+        public string ItemId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Group { get; set; } = "other"; // "raw", "refined", "other"
+        public string Category { get; set; } = string.Empty;
+        public int Count { get; set; }
+        public double SpaceM3 { get; set; }
+    }
+
+    public sealed class StationInventoryInfo
+    {
+        public string StationGuid { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string SystemName { get; set; } = string.Empty;
+        public string SectorName { get; set; } = string.Empty;
+        public bool IsActiveDepot { get; set; }
+        public bool IsHomeStation { get; set; }
+        public bool IsPlayerOutpost { get; set; }
+        public double SpaceUsed { get; set; }
+        public double Capacity { get; set; }
+        public double FillPct { get; set; }
+        public int TotalItemCount { get; set; }
+        public int RawCount { get; set; }
+        public int RefinedCount { get; set; }
+        public int OtherCount { get; set; }
+        public List<StationInventoryItem> Items { get; set; } = new List<StationInventoryItem>();
+    }
+
+    public sealed class DepotInventoryResponse
+    {
+        public bool InGame { get; set; }
+        public int StationCount { get; set; }
+        public List<StationInventoryInfo> Stations { get; set; } = new List<StationInventoryInfo>();
+    }
+
     public sealed class LiveTelemetry
     {
         public bool InGame { get; set; }

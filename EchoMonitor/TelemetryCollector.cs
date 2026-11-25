@@ -343,6 +343,176 @@ namespace EchoMonitor
             return status;
         }
 
+        public static DepotInventoryResponse CollectStationInventories()
+        {
+            var resp = new DepotInventoryResponse();
+            var gp = GamePlayer.current;
+            if (gp == null)
+            {
+                resp.InGame = false;
+                return resp;
+            }
+
+            resp.InGame = true;
+
+            try
+            {
+                var activeDepots = new HashSet<SpaceStation>();
+                if (GalaxyMapData.current != null)
+                {
+                    foreach (var sector in GalaxyMapData.current.allSectors)
+                    {
+                        if (sector == null) continue;
+                        var dep = SupplyNetwork.GetActiveDepot(sector) ?? SupplyNetwork.GetDepot(sector);
+                        if (dep != null && dep.materialStorage != null)
+                        {
+                            activeDepots.Add(dep);
+                        }
+                    }
+                }
+
+                var seen = new HashSet<SpaceStation>();
+                var candidates = new List<SpaceStation>();
+
+                void AddCandidate(SpaceStation ss)
+                {
+                    if (ss != null && ss.materialStorage != null && seen.Add(ss))
+                    {
+                        candidates.Add(ss);
+                    }
+                }
+
+                if (gp.homeStation != null) AddCandidate(gp.homeStation);
+                foreach (var dep in activeDepots) AddCandidate(dep);
+                foreach (var ps in PlayerStation.GetAllOwned()) AddCandidate(ps);
+
+                if (GalaxyMapData.current != null)
+                {
+                    foreach (var sys in GalaxyMapData.current.allSystems)
+                    {
+                        if (sys?.pointsOfInterest == null) continue;
+                        foreach (var poi in sys.pointsOfInterest)
+                        {
+                            if (poi is SpaceStation ss)
+                            {
+                                AddCandidate(ss);
+                            }
+                        }
+                    }
+                }
+
+                foreach (var ss in candidates)
+                {
+                    bool isActiveDepot = activeDepots.Contains(ss);
+                    bool isHome = gp.homeStation == ss;
+                    bool isOutpost = ss is PlayerStation;
+
+                    var byItemId = new Dictionary<string, StationInventoryItem>(StringComparer.Ordinal);
+                    int totalCount = 0;
+                    int rawCount = 0;
+                    int refinedCount = 0;
+                    int otherCount = 0;
+
+                    if (ss.materialStorage.items != null)
+                    {
+                        foreach (var entry in ss.materialStorage.items)
+                        {
+                            if (entry == null || entry.item == null || entry.count <= 0) continue;
+                            var cat = entry.item.itemCategory;
+                            string group = (cat == ItemCategory.Ore || cat == ItemCategory.Salvage || cat == ItemCategory.Crystal)
+                                ? "raw"
+                                : (cat == ItemCategory.RefinedProduct ? "refined" : "other");
+
+                            string itemId = entry.item.identifier ?? string.Empty;
+                            string itemName = TranslateIfNeeded(!string.IsNullOrEmpty(entry.item.displayName)
+                                ? entry.item.displayName
+                                : itemId);
+                            string key = !string.IsNullOrEmpty(itemId) ? itemId : itemName;
+
+                            if (!byItemId.TryGetValue(key, out var itemInfo))
+                            {
+                                itemInfo = new StationInventoryItem
+                                {
+                                    ItemId = itemId,
+                                    Name = itemName,
+                                    Group = group,
+                                    Category = cat.ToString(),
+                                    Count = 0,
+                                    SpaceM3 = 0.0
+                                };
+                                byItemId[key] = itemInfo;
+                            }
+
+                            itemInfo.Count += entry.count;
+                            itemInfo.SpaceM3 = Math.Round(itemInfo.SpaceM3 + entry.spaceRequired, 2);
+
+                            totalCount += entry.count;
+                            if (group == "raw") rawCount += entry.count;
+                            else if (group == "refined") refinedCount += entry.count;
+                            else otherCount += entry.count;
+                        }
+                    }
+
+                    // Skip empty NPC stations that aren't depots, home station, or player outposts
+                    if (byItemId.Count == 0 && !isActiveDepot && !isHome && !isOutpost)
+                    {
+                        continue;
+                    }
+
+                    var items = new List<StationInventoryItem>(byItemId.Values);
+                    items.Sort((a, b) =>
+                    {
+                        int cmp = b.Count.CompareTo(a.Count);
+                        return cmp != 0 ? cmp : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                    });
+
+                    double used = ss.materialStorage.spaceUsed;
+                    double cap = ss.materialStorage.capacity;
+                    double fillPct = cap > 0 ? Math.Round((used / cap) * 100.0, 1) : 0.0;
+
+                    resp.Stations.Add(new StationInventoryInfo
+                    {
+                        StationGuid = ss.guid ?? string.Empty,
+                        Name = TranslateIfNeeded(ss.name),
+                        SystemName = TranslateIfNeeded(ss.system?.name),
+                        SectorName = TranslateIfNeeded(ss.system?.sector?.name),
+                        IsActiveDepot = isActiveDepot,
+                        IsHomeStation = isHome,
+                        IsPlayerOutpost = isOutpost,
+                        SpaceUsed = Math.Round(used, 1),
+                        Capacity = Math.Round(cap, 1),
+                        FillPct = fillPct,
+                        TotalItemCount = totalCount,
+                        RawCount = rawCount,
+                        RefinedCount = refinedCount,
+                        OtherCount = otherCount,
+                        Items = items
+                    });
+                }
+
+                resp.Stations.Sort((a, b) =>
+                {
+                    int cmp = b.IsHomeStation.CompareTo(a.IsHomeStation);
+                    if (cmp != 0) return cmp;
+                    cmp = b.IsActiveDepot.CompareTo(a.IsActiveDepot);
+                    if (cmp != 0) return cmp;
+                    cmp = b.IsPlayerOutpost.CompareTo(a.IsPlayerOutpost);
+                    if (cmp != 0) return cmp;
+                    cmp = b.SpaceUsed.CompareTo(a.SpaceUsed);
+                    if (cmp != 0) return cmp;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+
+                resp.StationCount = resp.Stations.Count;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"CollectStationInventories error: {ex.Message}");
+            }
+
+            return resp;
+        }
+
         private static string TranslateIfNeeded(string value)
         {
             if (string.IsNullOrEmpty(value)) return string.Empty;

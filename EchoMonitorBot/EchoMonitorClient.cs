@@ -41,6 +41,21 @@ public sealed class EchoMonitorClient : IDisposable
         }
     }
 
+    public async Task<JsonDocument?> GetDepotsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var resp = await _restClient.GetAsync($"{_config.EchoMonitorUrl}/api/depots", ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            string json = await resp.Content.ReadAsStringAsync(ct);
+            return JsonDocument.Parse(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public async Task<ActionResult> PostActionAsync(string path, CancellationToken ct = default)
     {
         try

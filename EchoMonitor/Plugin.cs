@@ -57,6 +57,7 @@ namespace EchoMonitor
                 GetCachedOrLiveStateJson,
                 () => _sessionManager.GetHistoryJson(),
                 () => _sessionManager.GetMissionLogJson(),
+                HandleGetDepots,
                 HandleResetSession,
                 HandleWarpSafeStation,
                 HandleResetEcho,
@@ -193,6 +194,12 @@ namespace EchoMonitor
         {
             var res = _dispatcher.Invoke(() => RecoveryController.RelieveOutpostStorage(stationGuid, _stuckDetector), timeoutMs: 5000);
             return JsonUtil.SerializeRecoveryResponse(res);
+        }
+
+        private string HandleGetDepots()
+        {
+            var res = _dispatcher.Invoke(() => TelemetryCollector.CollectStationInventories(), timeoutMs: 5000);
+            return JsonUtil.SerializeDepotInventory(res);
         }
 
         private void TryLaunchCompanionBot()

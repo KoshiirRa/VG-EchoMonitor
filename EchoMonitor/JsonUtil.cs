@@ -636,6 +636,56 @@ namespace EchoMonitor
             sb.Append(']');
         }
 
+        public static string SerializeDepotInventory(DepotInventoryResponse resp)
+        {
+            if (resp == null) return "{\"inGame\":false,\"stationCount\":0,\"stations\":[]}";
+            var sb = new StringBuilder(4096);
+            sb.Append("{\"inGame\":"); sb.Append(resp.InGame ? "true" : "false");
+            sb.Append(",\"stationCount\":"); sb.Append(resp.StationCount.ToString(CultureInfo.InvariantCulture));
+            sb.Append(",\"stations\":[");
+            if (resp.Stations != null)
+            {
+                for (int i = 0; i < resp.Stations.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    var st = resp.Stations[i];
+                    sb.Append("{\"stationGuid\":"); AppendString(sb, st.StationGuid);
+                    sb.Append(",\"name\":"); AppendString(sb, st.Name);
+                    sb.Append(",\"systemName\":"); AppendString(sb, st.SystemName);
+                    sb.Append(",\"sectorName\":"); AppendString(sb, st.SectorName);
+                    sb.Append(",\"isActiveDepot\":"); sb.Append(st.IsActiveDepot ? "true" : "false");
+                    sb.Append(",\"isHomeStation\":"); sb.Append(st.IsHomeStation ? "true" : "false");
+                    sb.Append(",\"isPlayerOutpost\":"); sb.Append(st.IsPlayerOutpost ? "true" : "false");
+                    sb.Append(",\"spaceUsed\":"); AppendDouble(sb, st.SpaceUsed);
+                    sb.Append(",\"capacity\":"); AppendDouble(sb, st.Capacity);
+                    sb.Append(",\"fillPct\":"); AppendDouble(sb, st.FillPct);
+                    sb.Append(",\"totalItemCount\":"); sb.Append(st.TotalItemCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"rawCount\":"); sb.Append(st.RawCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"refinedCount\":"); sb.Append(st.RefinedCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"otherCount\":"); sb.Append(st.OtherCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"items\":[");
+                    if (st.Items != null)
+                    {
+                        for (int j = 0; j < st.Items.Count; j++)
+                        {
+                            if (j > 0) sb.Append(',');
+                            var it = st.Items[j];
+                            sb.Append("{\"itemId\":"); AppendString(sb, it.ItemId);
+                            sb.Append(",\"name\":"); AppendString(sb, it.Name);
+                            sb.Append(",\"group\":"); AppendString(sb, it.Group);
+                            sb.Append(",\"category\":"); AppendString(sb, it.Category);
+                            sb.Append(",\"count\":"); sb.Append(it.Count.ToString(CultureInfo.InvariantCulture));
+                            sb.Append(",\"spaceM3\":"); AppendDouble(sb, it.SpaceM3);
+                            sb.Append('}');
+                        }
+                    }
+                    sb.Append("]}");
+                }
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+
         private static void AppendSnapshotSummary(StringBuilder sb, PlayerSnapshot s)
         {
             if (s == null)

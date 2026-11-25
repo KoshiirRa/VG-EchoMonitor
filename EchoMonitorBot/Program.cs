@@ -493,6 +493,28 @@ public static class Program
                     await _discord.ReplyInteractionAsync(interaction, embed: BuildEmpireEmbed(state.Value));
                 break;
             }
+            case "depot":
+            {
+                using var doc = await _api.GetDepotsAsync();
+                if (doc == null)
+                {
+                    await _discord.ReplyInteractionAsync(interaction, text: "EchoMonitor is currently unreachable.", ephemeral: true);
+                }
+                else
+                {
+                    interaction.Options.TryGetValue("location", out var location);
+                    interaction.Options.TryGetValue("filter", out var filter);
+                    interaction.Options.TryGetValue("search", out var search);
+                    interaction.Options.TryGetValue("sort", out var sort);
+                    await _discord.ReplyInteractionAsync(interaction, embed: BuildDepotEmbed(
+                        doc.RootElement,
+                        string.IsNullOrWhiteSpace(location) ? null : location.Trim(),
+                        string.IsNullOrWhiteSpace(filter) ? "all" : filter.Trim().ToLowerInvariant(),
+                        string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+                        string.IsNullOrWhiteSpace(sort) ? "count" : sort.Trim().ToLowerInvariant()));
+                }
+                break;
+            }
             case "recover":
             {
                 if (!_config.IsAllowed(interaction.UserId))
@@ -955,6 +977,209 @@ public static class Program
 
         return MakeEmbed("Empire & Refining Overview", depotDesc, 0x38BDF8, fields);
     }
+
+    private static JsonObject BuildDepotEmbed(JsonElement root, string? location, string filter, string? search, string sort)
+    {
+        if (!GetBool(root, "inGame"))
+            return MakeEmbed("Station & Depot Inventory", "Not currently in game.", 0x64748B);
+
+        if (!TryGetArr(root, "stations", out var stationsEl) || stationsEl.GetArrayLength() == 0)
+            return MakeEmbed("Station & Depot Inventory", "No stations with stored materials found.", 0x38BDF8);
+
+        var allStations = new List<JsonElement>();
+        foreach (var st in stationsEl.EnumerateArray())
+            allStations.Add(st);
+
+        // Filter by location (station name, system name, or sector name)
+        var matched = allStations;
+        if (!string.IsNullOrEmpty(location))
+        {
+            matched = allStations.Where(st =>
+                (GetStr(st, "name") ?? "").Contains(location, StringComparison.OrdinalIgnoreCase) ||
+                (GetStr(st, "systemName") ?? "").Contains(location, StringComparison.OrdinalIgnoreCase) ||
+                (GetStr(st, "sectorName") ?? "").Contains(location, StringComparison.OrdinalIgnoreCase)
+            ).ToList();
+
+            if (matched.Count == 0)
+            {
+                var names = string.Join(", ", allStations.Take(10).Select(st => $"`{GetStr(st, "name")}`"));
+                return MakeEmbed(
+                    "Station & Depot Inventory",
+                    $"No station, system, or sector matched **`{location}`**.\nAvailable stations: {names}",
+                    0xF59E0B);
+            }
+        }
+
+        string filterLabel = filter switch
+        {
+            "raw" => "Raw (Ores/Crystals/Salvage)",
+            "refined" => "Refined",
+            "other" => "Other",
+            _ => "All"
+        };
+
+        List<JsonElement> FilterAndSortItems(JsonElement st)
+        {
+            var list = new List<JsonElement>();
+            if (!TryGetArr(st, "items", out var itemsEl)) return list;
+            foreach (var it in itemsEl.EnumerateArray())
+            {
+                string grp = GetStr(it, "group") ?? "other";
+                if (filter != "all" && !grp.Equals(filter, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!string.IsNullOrEmpty(search))
+                {
+                    string name = GetStr(it, "name") ?? "";
+                    if (!name.Contains(search, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                }
+                list.Add(it);
+            }
+
+            if (sort == "volume")
+                list.Sort((a, b) => GetDbl(b, "spaceM3").CompareTo(GetDbl(a, "spaceM3")));
+            else if (sort == "name")
+                list.Sort((a, b) => string.Compare(GetStr(a, "name"), GetStr(b, "name"), StringComparison.OrdinalIgnoreCase));
+            else
+                list.Sort((a, b) => GetInt(b, "count").CompareTo(GetInt(a, "count")));
+
+            return list;
+        }
+
+        static string StationTags(JsonElement st)
+        {
+            var tags = new List<string>();
+            if (GetBool(st, "isHomeStation")) tags.Add("Home");
+            if (GetBool(st, "isActiveDepot")) tags.Add("Depot");
+            if (GetBool(st, "isPlayerOutpost")) tags.Add("Outpost");
+            return tags.Count > 0 ? $" [{string.Join("/", tags)}]" : "";
+        }
+
+        // Case 1: Overview mode (no location and no search, and > 1 station)
+        if (string.IsNullOrEmpty(location) && string.IsNullOrEmpty(search) && matched.Count > 1)
+        {
+            var lines = new List<string>();
+            int shown = 0;
+            foreach (var st in matched)
+            {
+                int countForFilter = filter switch
+                {
+                    "raw" => GetInt(st, "rawCount"),
+                    "refined" => GetInt(st, "refinedCount"),
+                    "other" => GetInt(st, "otherCount"),
+                    _ => GetInt(st, "totalItemCount")
+                };
+                if (filter != "all" && countForFilter == 0) continue;
+
+                string name = GetStr(st, "name") ?? "Station";
+                string sys = GetStr(st, "systemName") ?? "";
+                string sec = GetStr(st, "sectorName") ?? "";
+                string loc = !string.IsNullOrEmpty(sys) && !string.IsNullOrEmpty(sec) ? $"{sys} ({sec})" : (!string.IsNullOrEmpty(sec) ? sec : sys);
+                double fillPct = GetDbl(st, "fillPct");
+                long used = (long)GetDbl(st, "spaceUsed");
+                long cap = (long)GetDbl(st, "capacity");
+
+                string breakdown = filter == "all"
+                    ? $"Raw: {FmtNum(GetInt(st, "rawCount"))} • Ref: {FmtNum(GetInt(st, "refinedCount"))} • Other: {FmtNum(GetInt(st, "otherCount"))}"
+                    : $"{filterLabel}: **{FmtNum(countForFilter)}**";
+
+                lines.Add($"• **{name}**{StationTags(st)} — {loc}\n  {fillPct:0.0}% ({FmtNum(used)}/{FmtNum(cap)} m³) • {breakdown}");
+                shown++;
+                if (shown >= 15) break;
+            }
+
+            if (lines.Count == 0)
+                return MakeEmbed($"Station & Depot Inventory ({filterLabel})", $"No stations have items matching filter **{filterLabel}**.", 0x38BDF8);
+
+            if (matched.Count > shown)
+                lines.Add($"*…and {matched.Count - shown} more stations. Use `/depot location:<name>` to inspect.*");
+
+            lines.Add("\n*Tip: `/depot location:<name> filter:raw|refined|other` or `/depot search:<item>`*");
+            return MakeEmbed($"Stations & Depots ({shown} shown • {filterLabel})", string.Join("\n", lines), 0x38BDF8);
+        }
+
+        // Case 2: Detailed station view (single station or filtered/searched stations)
+        var fields = new JsonArray();
+        int stationsWithHits = 0;
+        long grandTotal = 0;
+        int maxStations = matched.Count == 1 ? 1 : 6;
+        int maxItemsPerStation = matched.Count == 1 ? 22 : 8;
+
+        foreach (var st in matched)
+        {
+            var items = FilterAndSortItems(st);
+            if (!string.IsNullOrEmpty(search) && items.Count == 0)
+                continue;
+
+            stationsWithHits++;
+            if (fields.Count >= maxStations) continue;
+
+            string name = GetStr(st, "name") ?? "Station";
+            string sys = GetStr(st, "systemName") ?? "";
+            string sec = GetStr(st, "sectorName") ?? "";
+            string loc = !string.IsNullOrEmpty(sys) && !string.IsNullOrEmpty(sec) ? $"{sys} / {sec}" : (!string.IsNullOrEmpty(sec) ? sec : sys);
+            double fillPct = GetDbl(st, "fillPct");
+            long used = (long)GetDbl(st, "spaceUsed");
+            long cap = (long)GetDbl(st, "capacity");
+
+            string fieldTitle = $"{name}{StationTags(st)} — {fillPct:0.0}% ({FmtNum(used)}/{FmtNum(cap)} m³)";
+            if (!string.IsNullOrEmpty(loc))
+                fieldTitle = $"{name}{StationTags(st)} ({loc}) — {fillPct:0.0}%";
+
+            if (items.Count == 0)
+            {
+                fields.Add(MakeField(fieldTitle, $"No items matching **{filterLabel}**.", false));
+                continue;
+            }
+
+            var itemLines = new List<string>();
+            int totalUnits = 0;
+            foreach (var it in items) totalUnits += GetInt(it, "count");
+            grandTotal += totalUnits;
+
+            foreach (var it in items.Take(maxItemsPerStation))
+            {
+                string itName = GetStr(it, "name") ?? "Unknown";
+                int cnt = GetInt(it, "count");
+                double m3 = GetDbl(it, "spaceM3");
+                string grpTag = filter == "all" ? $" `[{GetStr(it, "group")}]`" : "";
+                string line = sort == "volume"
+                    ? $"• **{itName}**: {FmtNum(cnt)} ({m3:0.#} m³){grpTag}"
+                    : $"• **{itName}**: {FmtNum(cnt)}{grpTag}";
+                if (itemLines.Sum(l => l.Length + 1) + line.Length > 960)
+                    break;
+                itemLines.Add(line);
+            }
+
+            if (items.Count > itemLines.Count)
+                itemLines.Add($"*…+{items.Count - itemLines.Count} more ({FmtNum(totalUnits)} total units)*");
+
+            fields.Add(MakeField(fieldTitle, string.Join("\n", itemLines), false));
+        }
+
+        if (fields.Count == 0)
+        {
+            return MakeEmbed(
+                "Station & Depot Inventory",
+                $"No items found matching{(search != null ? $" **`{search}`**" : "")} ({filterLabel}).",
+                0xF59E0B);
+        }
+
+        string title = !string.IsNullOrEmpty(search)
+            ? $"Depot Search: \"{search}\" ({filterLabel})"
+            : (matched.Count == 1
+                ? $"{GetStr(matched[0], "name")}{StationTags(matched[0])} ({filterLabel})"
+                : $"Stations matching \"{location}\" ({filterLabel})");
+
+        string desc = !string.IsNullOrEmpty(search)
+            ? $"Found across **{stationsWithHits}** station(s) — **{FmtNum(grandTotal)}** total units."
+            : (matched.Count == 1
+                ? $"Storage: **{GetDbl(matched[0], "fillPct"):0.0}%** ({FmtNum((long)GetDbl(matched[0], "spaceUsed"))} / {FmtNum((long)GetDbl(matched[0], "capacity"))} m³) • Sort: `{sort}`"
+                : $"Showing {fields.Count} of {stationsWithHits} matching station(s) • Sort: `{sort}`");
+
+        return MakeEmbed(title, desc, 0x38BDF8, fields);
+    }
+
 
     private static JsonObject MakeEmbed(string title, string? description, int color, JsonArray? fields = null)
     {
