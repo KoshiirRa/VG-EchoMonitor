@@ -560,7 +560,30 @@ namespace EchoMonitor
                     sb.Append(",\"largestStackItemName\":"); AppendString(sb, op.LargestStackItemName);
                     sb.Append(",\"largestStackCount\":"); sb.Append(op.LargestStackCount.ToString(CultureInfo.InvariantCulture));
                     sb.Append(",\"largestStackM3\":"); AppendDouble(sb, op.LargestStackM3);
-                    sb.Append('}');
+                    sb.Append(",\"state\":"); AppendString(sb, op.State);
+                    sb.Append(",\"hasStalledJob\":"); AppendBool(sb, op.HasStalledJob);
+                    sb.Append(",\"activeJobCount\":"); sb.Append(op.ActiveJobCount.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(",\"jobs\":[");
+                    if (op.Jobs != null)
+                    {
+                        for (int j = 0; j < op.Jobs.Count; j++)
+                        {
+                            if (j > 0) sb.Append(',');
+                            var jb = op.Jobs[j];
+                            sb.Append("{\"jobType\":"); AppendString(sb, jb.JobType);
+                            sb.Append(",\"name\":"); AppendString(sb, jb.Name);
+                            sb.Append(",\"progressPct\":"); AppendDouble(sb, jb.ProgressPct);
+                            sb.Append(",\"initialAmount\":"); sb.Append(jb.InitialAmount.ToString(CultureInfo.InvariantCulture));
+                            sb.Append(",\"remainingAmount\":"); sb.Append(jb.RemainingAmount.ToString(CultureInfo.InvariantCulture));
+                            sb.Append(",\"repeat\":"); AppendBool(sb, jb.Repeat);
+                            sb.Append(",\"stalled\":"); AppendBool(sb, jb.Stalled);
+                            sb.Append(",\"paused\":"); AppendBool(sb, jb.Paused);
+                            sb.Append(",\"awaitingSupplies\":"); AppendBool(sb, jb.AwaitingSupplies);
+                            sb.Append(",\"timeRemainingSec\":"); AppendDouble(sb, jb.TimeRemainingSec);
+                            sb.Append('}');
+                        }
+                    }
+                    sb.Append("]}");
                 }
             }
             sb.Append("],\"depotCount\":"); sb.Append(e.DepotCount.ToString(CultureInfo.InvariantCulture));
@@ -694,6 +717,7 @@ namespace EchoMonitor
                 sb.Append("{\"name\":"); AppendString(sb, m.Name);
                 sb.Append(",\"rarity\":"); AppendString(sb, m.Rarity);
                 sb.Append(",\"itemLevel\":"); sb.Append(m.ItemLevel.ToString(CultureInfo.InvariantCulture));
+                sb.Append(",\"size\":"); AppendString(sb, m.Size);
                 sb.Append(",\"equipmentType\":"); AppendString(sb, m.EquipmentType);
                 sb.Append(",\"gained\":"); sb.Append(m.Gained.ToString(CultureInfo.InvariantCulture));
                 sb.Append(",\"substats\":"); AppendStringList(sb, m.Substats);

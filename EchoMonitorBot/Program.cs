@@ -308,7 +308,7 @@ public static class Program
 
         if (hasMods)
         {
-            var newDrops = new List<(string Name, string Rarity, int ItemLevel, int Diff, List<string> Lines)>();
+            var newDrops = new List<(string Name, string Rarity, string Size, int ItemLevel, int Diff, List<string> Lines)>();
             foreach (var mod in newMods.EnumerateArray())
             {
                 string name = GetStr(mod, "name", "Unknown Module");
@@ -324,7 +324,9 @@ public static class Program
                     if (_config.RarityMeetsThreshold(rarity))
                     {
                         int diff = gained - prev;
-                        var lines = new List<string> { $"**{name}** (iLvl {ilvl}) x{diff}" };
+                        string size = GetStr(mod, "size");
+                        string meta = !string.IsNullOrEmpty(size) ? $"{size}, iLvl {ilvl}" : $"iLvl {ilvl}";
+                        var lines = new List<string> { $"**{name}** ({meta}) x{diff}" };
                         if (TryGetArr(mod, "substats", out var subs))
                         {
                             int count = 0;
@@ -353,7 +355,7 @@ public static class Program
                                     lines.Add($"• **{aName}**");
                             }
                         }
-                        newDrops.Add((name, rarity, ilvl, diff, lines));
+                        newDrops.Add((name, rarity, size, ilvl, diff, lines));
                     }
                 }
             }
@@ -366,7 +368,8 @@ public static class Program
                 };
                 foreach (var d in newDrops.Take(10))
                 {
-                    summaryLines.Add($"- **[{d.Rarity}] {d.Name}** (iLvl {d.ItemLevel}) x{d.Diff}");
+                    string meta = !string.IsNullOrEmpty(d.Size) ? $"{d.Size}, iLvl {d.ItemLevel}" : $"iLvl {d.ItemLevel}";
+                    summaryLines.Add($"- **[{d.Rarity}] {d.Name}** ({meta}) x{d.Diff}");
                 }
                 if (newDrops.Count > 10)
                     summaryLines.Add($"*...and {newDrops.Count - 10} more*");
@@ -877,15 +880,42 @@ public static class Program
             int n = 0;
             foreach (var op in outposts.EnumerateArray())
             {
-                if (n++ >= 8) break;
+                if (n++ >= 6) break;
                 double pct = GetDbl(op, "fillPct");
-                string icon = pct >= 95.0 ? "🔴" : (pct >= 80.0 ? "🟠" : "🟢");
-                string stack = GetInt(op, "largestStackCount") > 0
-                    ? $" — top: {FmtNum(GetInt(op, "largestStackCount"))}x {GetStr(op, "largestStackItemName")}"
-                    : "";
-                lines.Add($"{icon} **{GetStr(op, "name")}** ({GetStr(op, "systemName")}): **{pct:0.0}%**{stack}");
+                string opState = GetStr(op, "state", "Idle");
+                bool stalled = GetBool(op, "hasStalledJob");
+                string icon = (pct >= 95.0 || opState == "StorageFull" || opState == "Raided") ? "🔴"
+                    : (stalled || opState == "MissingMaterials" || pct >= 80.0) ? "🟠"
+                    : opState == "Upgrading" ? "🔵"
+                    : opState == "Working" ? "🟢" : "⚪";
+
+                string jobSummary = "";
+                if (TryGetArr(op, "jobs", out var jobs) && jobs.GetArrayLength() > 0)
+                {
+                    var jParts = new List<string>();
+                    int jn = 0;
+                    foreach (var jb in jobs.EnumerateArray())
+                    {
+                        if (jn++ >= 2) break;
+                        string jName = GetStr(jb, "name", GetStr(jb, "jobType", "Job"));
+                        double jPct = GetDbl(jb, "progressPct");
+                        string jFlag = GetBool(jb, "stalled") ? " [STALLED]"
+                            : GetBool(jb, "paused") ? " [PAUSED]"
+                            : GetBool(jb, "awaitingSupplies") ? " [SUPPLIES]" : "";
+                        int rem = GetInt(jb, "remainingAmount");
+                        string qty = rem > 1 ? $" x{FmtNum(rem)}" : "";
+                        jParts.Add($"{jName}{qty} ({jPct:0}%){jFlag}");
+                    }
+                    if (jobs.GetArrayLength() > 2)
+                        jParts.Add($"+{jobs.GetArrayLength() - 2} more");
+                    jobSummary = $" | {string.Join(", ", jParts)}";
+                }
+
+                lines.Add($"{icon} **{GetStr(op, "name")}** [{opState}] — **{pct:0.0}%**{jobSummary}");
             }
-            fields.Add(MakeField($"Outpost Storage ({outposts.GetArrayLength()})", string.Join("\n", lines), false));
+            string fieldVal = string.Join("\n", lines);
+            if (fieldVal.Length > 1020) fieldVal = fieldVal.Substring(0, 1017) + "...";
+            fields.Add(MakeField($"Outposts & Jobs ({outposts.GetArrayLength()})", fieldVal, false));
         }
 
         int rawTotal = GetInt(empire, "rawBacklogTotal");

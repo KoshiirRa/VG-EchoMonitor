@@ -625,11 +625,13 @@ namespace EchoMonitor
                         string rarity = parts.Length > 1 ? parts[1] : "Common";
                         int ilvl = parts.Length > 2 && int.TryParse(parts[2], out int l) ? l : 0;
                         string eqType = parts.Length > 3 ? parts[3] : string.Empty;
+                        string size = parts.Length >= 6 ? parts[4] : string.Empty;
                         var entry = new ModuleDeltaEntry
                         {
                             Name = name,
                             Rarity = rarity,
                             ItemLevel = ilvl,
+                            Size = size,
                             EquipmentType = eqType,
                             Gained = diff
                         };
