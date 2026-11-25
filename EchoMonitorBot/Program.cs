@@ -325,7 +325,7 @@ public static class Program
                     {
                         int diff = gained - prev;
                         string size = GetStr(mod, "size");
-                        string meta = !string.IsNullOrEmpty(size) ? $"{size}, iLvl {ilvl}" : $"iLvl {ilvl}";
+                        string meta = !string.IsNullOrEmpty(size) ? $"{size}, LVL {ilvl}" : $"LVL {ilvl}";
                         var lines = new List<string> { $"**{name}** ({meta}) x{diff}" };
                         if (TryGetArr(mod, "substats", out var subs))
                         {
@@ -368,7 +368,7 @@ public static class Program
                 };
                 foreach (var d in newDrops.Take(10))
                 {
-                    string meta = !string.IsNullOrEmpty(d.Size) ? $"{d.Size}, iLvl {d.ItemLevel}" : $"iLvl {d.ItemLevel}";
+                    string meta = !string.IsNullOrEmpty(d.Size) ? $"{d.Size}, LVL {d.ItemLevel}" : $"LVL {d.ItemLevel}";
                     summaryLines.Add($"- **[{d.Rarity}] {d.Name}** ({meta}) x{d.Diff}");
                 }
                 if (newDrops.Count > 10)
@@ -709,7 +709,7 @@ public static class Program
                 int g = Math.Max(1, GetInt(m, "gained"));
                 byRarity[r] = byRarity.GetValueOrDefault(r, 0) + g;
                 if (r.Equals("Exotic", StringComparison.OrdinalIgnoreCase) || r.Equals("Legendary", StringComparison.OrdinalIgnoreCase))
-                    highlights.Add($"- **[{r}]** {GetStr(m, "name", "Unknown")} (iLvl {GetInt(m, "itemLevel")}) x{g}");
+                    highlights.Add($"- **[{r}]** {GetStr(m, "name", "Unknown")} (LVL {GetInt(m, "itemLevel")}) x{g}");
             }
         }
 
@@ -738,7 +738,7 @@ public static class Program
             foreach (var c in crates.EnumerateArray())
             {
                 if (cCount++ >= 8) break;
-                lines.Add($"- **[{GetStr(c, "rarity", "Standard")}]** {GetStr(c, "name", "Crate")} (iLvl {GetInt(c, "itemLevel")}) +{GetInt(c, "gained")}");
+                lines.Add($"- **[{GetStr(c, "rarity", "Standard")}]** {GetStr(c, "name", "Crate")} (LVL {GetInt(c, "itemLevel")}) +{GetInt(c, "gained")}");
             }
             fields.Add(MakeField($"Locked Crates (+{cratesTotal})", string.Join("\n", lines), false));
         }

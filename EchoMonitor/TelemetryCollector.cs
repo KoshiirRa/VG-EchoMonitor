@@ -793,7 +793,11 @@ namespace EchoMonitor
                             string name = TranslateIfNeeded(item.displayName ?? item.identifier ?? "Unknown");
                             string rarity = item.rarity.ToString();
                             int ilvl = item.itemLevel;
-                            string eqType = item.equipmentDefinition.name ?? string.Empty;
+                            string eqType = TranslateIfNeeded(item.equipmentDefinition.typeDisplayName);
+                            if (string.IsNullOrEmpty(eqType))
+                                eqType = TranslateIfNeeded("@EquipSlot" + item.equipmentDefinition.slot);
+                            if (string.IsNullOrEmpty(eqType))
+                                eqType = item.equipmentDefinition.name ?? string.Empty;
                             string size = TranslateIfNeeded(item.equipmentDefinition.size.GetDisplayName());
                             if (string.IsNullOrEmpty(size))
                                 size = item.equipmentDefinition.size.ToString();
