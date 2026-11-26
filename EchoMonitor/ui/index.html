@@ -1642,105 +1642,6 @@
 
         <div id="enhanced-rules-list"></div>
 
-        <!-- Visual Rule Editor -->
-        <div id="enhanced-rule-editor" class="rule-form hidden">
-          <div class="section-heading" style="margin-top:0">
-            <span id="rule-editor-title">Edit Rule</span>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button id="btn-rule-preview" class="btn" type="button">Test This Rule</button>
-              <button id="btn-rule-save" class="btn" type="button">Save Rule</button>
-              <button id="btn-rule-cancel" class="btn" type="button">Cancel</button>
-            </div>
-          </div>
-
-          <div class="rule-form-grid">
-            <div class="rule-field">
-              <label for="rf-name">Rule Name</label>
-              <input id="rf-name" class="filter-input" type="text" style="width:100%" placeholder="e.g. Exotic+ Crit Turrets">
-            </div>
-            <div class="rule-field">
-              <label for="rf-min-rarity">Min Rarity</label>
-              <select id="rf-min-rarity" class="filter-select" style="width:100%">
-                <option value="">Any</option>
-                <option value="Standard">Standard</option>
-                <option value="Enhanced">Enhanced</option>
-                <option value="HighGrade">HighGrade</option>
-                <option value="Exotic">Exotic</option>
-                <option value="Legendary">Legendary</option>
-              </select>
-            </div>
-            <div class="rule-field">
-              <label for="rf-max-rarity">Max Rarity</label>
-              <select id="rf-max-rarity" class="filter-select" style="width:100%">
-                <option value="">Any</option>
-                <option value="Standard">Standard</option>
-                <option value="Enhanced">Enhanced</option>
-                <option value="HighGrade">HighGrade</option>
-                <option value="Exotic">Exotic</option>
-                <option value="Legendary">Legendary</option>
-              </select>
-            </div>
-            <div class="rule-field">
-              <label for="rf-min-ilvl">Min iLvl</label>
-              <input id="rf-min-ilvl" class="filter-input" type="number" min="0" style="width:100%" placeholder="Any">
-            </div>
-            <div class="rule-field">
-              <label for="rf-max-ilvl">Max iLvl</label>
-              <input id="rf-max-ilvl" class="filter-input" type="number" min="0" style="width:100%" placeholder="Any">
-            </div>
-            <div class="rule-field">
-              <label for="rf-has-aspect">Aspect</label>
-              <select id="rf-has-aspect" class="filter-select" style="width:100%">
-                <option value="">Any</option>
-                <option value="true">Must Have Aspect</option>
-                <option value="false">No Aspect</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="rule-field" style="margin-bottom:10px">
-            <label>Categories (leave all unselected to match all equipment)</label>
-            <div id="rf-categories" class="pill-toggle-group">
-              <button type="button" class="pill-toggle" data-cat="Turret">Turret</button>
-              <button type="button" class="pill-toggle" data-cat="Module">Module</button>
-              <button type="button" class="pill-toggle" data-cat="Booster">Booster</button>
-              <button type="button" class="pill-toggle" data-cat="Drone">Drone</button>
-              <button type="button" class="pill-toggle" data-cat="DefensiveTurret">DefensiveTurret</button>
-            </div>
-          </div>
-
-          <div class="rule-form-grid">
-            <div class="rule-field">
-              <label for="rf-name-contains">Name Contains (comma-separated, matches ANY)</label>
-              <input id="rf-name-contains" class="filter-input" type="text" style="width:100%" placeholder="e.g. Microcell Swarm, Hailfire">
-            </div>
-            <div class="rule-field">
-              <label for="rf-name-excludes">Name Excludes (comma-separated)</label>
-              <input id="rf-name-excludes" class="filter-input" type="text" style="width:100%" placeholder="e.g. Salvage">
-            </div>
-            <div class="rule-field">
-              <label for="rf-aspect-contains">Aspect Contains (comma-separated, matches ANY)</label>
-              <input id="rf-aspect-contains" class="filter-input" type="text" list="rf-aspect-datalist" style="width:100%" placeholder="e.g. Punch Through">
-              <datalist id="rf-aspect-datalist"></datalist>
-            </div>
-          </div>
-
-          <div class="rule-field" style="margin-bottom:8px">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-              <label style="margin:0">Workshop Reroll-Aware Substats ("N of M"):</label>
-              <label style="margin:0;display:flex;align-items:center;gap:5px">
-                Min Matches:
-                <input id="rf-substat-min" class="filter-input" type="number" min="1" value="2" style="width:64px">
-              </label>
-              <input id="rf-substat-search" class="filter-input" type="text" placeholder="Filter substats..." style="flex:1;min-width:160px">
-            </div>
-            <div id="rf-substat-selected" class="rule-pills" style="margin-bottom:6px"></div>
-            <div id="rf-substat-picker" class="stat-picker-list"></div>
-          </div>
-
-          <div id="rf-preview-box" class="preview-box hidden"></div>
-        </div>
-
         <details style="margin:12px 0">
           <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px">Advanced JSON Editor (Copy / Paste / Share Rules)</summary>
           <div style="margin-top:8px">
@@ -1788,6 +1689,7 @@
           <div class="section-heading">
             <span>Auto-Sell Rules <span id="autosell-rules-path" class="mono muted" style="font-size:11px"></span></span>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button id="btn-autosell-new-rule" class="btn" type="button">+ New Rule</button>
               <select id="sel-autosell-preset" class="filter-select" aria-label="Add Auto-Sell preset">
                 <option value="">+ Add Preset...</option>
                 <option value="standard_junk">Standard Rarity Equipment</option>
@@ -1845,6 +1747,7 @@
           <div class="section-heading">
             <span>Auto-Buy Rules <span id="autobuy-rules-path" class="mono muted" style="font-size:11px"></span></span>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button id="btn-autobuy-new-rule" class="btn" type="button">+ New Rule</button>
               <select id="sel-autobuy-preset" class="filter-select" aria-label="Add Auto-Buy preset">
                 <option value="">+ Add Preset...</option>
                 <option value="unknown_bp">All Unknown Blueprints</option>
@@ -1871,6 +1774,118 @@
             <span>Recent Auto-Buy Activity</span>
           </div>
           <div id="autobuy-events-container"></div>
+        </div>
+
+        <!-- Shared Visual Rule Editor (Auto-Favorite / Auto-Sell / Auto-Buy) -->
+        <div id="enhanced-rule-editor" class="rule-form hidden" style="margin-top:16px">
+          <div class="section-heading" style="margin-top:0">
+            <span id="rule-editor-title">Edit Rule</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btn-rule-preview" class="btn" type="button">Test This Rule</button>
+              <button id="btn-rule-save" class="btn" type="button">Save Rule</button>
+              <button id="btn-rule-cancel" class="btn" type="button">Cancel</button>
+            </div>
+          </div>
+
+          <div class="rule-form-grid">
+            <div class="rule-field">
+              <label for="rf-name">Rule Name</label>
+              <input id="rf-name" class="filter-input" type="text" style="width:100%" placeholder="e.g. Exotic+ Crit Turrets">
+            </div>
+            <div class="rule-field">
+              <label for="rf-min-rarity">Min Rarity</label>
+              <select id="rf-min-rarity" class="filter-select" style="width:100%">
+                <option value="">Any</option>
+                <option value="Standard">Standard</option>
+                <option value="Enhanced">Enhanced</option>
+                <option value="HighGrade">HighGrade</option>
+                <option value="Exotic">Exotic</option>
+                <option value="Legendary">Legendary</option>
+              </select>
+            </div>
+            <div class="rule-field">
+              <label for="rf-max-rarity">Max Rarity</label>
+              <select id="rf-max-rarity" class="filter-select" style="width:100%">
+                <option value="">Any</option>
+                <option value="Standard">Standard</option>
+                <option value="Enhanced">Enhanced</option>
+                <option value="HighGrade">HighGrade</option>
+                <option value="Exotic">Exotic</option>
+                <option value="Legendary">Legendary</option>
+              </select>
+            </div>
+            <div class="rule-field">
+              <label for="rf-min-ilvl">Min iLvl</label>
+              <input id="rf-min-ilvl" class="filter-input" type="number" min="0" style="width:100%" placeholder="Any">
+            </div>
+            <div class="rule-field">
+              <label for="rf-max-ilvl">Max iLvl</label>
+              <input id="rf-max-ilvl" class="filter-input" type="number" min="0" style="width:100%" placeholder="Any">
+            </div>
+            <div class="rule-field">
+              <label for="rf-has-aspect">Aspect</label>
+              <select id="rf-has-aspect" class="filter-select" style="width:100%">
+                <option value="">Any</option>
+                <option value="true">Must Have Aspect</option>
+                <option value="false">No Aspect</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="rf-autobuy-fields" class="rule-form-grid hidden" style="margin-bottom:10px">
+            <div class="rule-field">
+              <label for="rf-max-price">Max Unit Price (credits, blank = no cap)</label>
+              <input id="rf-max-price" class="filter-input mono" type="number" min="0" step="1000" style="width:100%" placeholder="No cap">
+            </div>
+            <div class="rule-field" style="display:flex;align-items:flex-end;padding-bottom:6px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+                <input id="rf-only-unknown-bp" type="checkbox" checked> <span>Only Unknown Blueprints</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="rule-field" style="margin-bottom:10px">
+            <label>Categories (leave all unselected to match all equipment)</label>
+            <div id="rf-categories" class="pill-toggle-group">
+              <button type="button" class="pill-toggle" data-cat="Turret">Turret</button>
+              <button type="button" class="pill-toggle" data-cat="Module">Module</button>
+              <button type="button" class="pill-toggle" data-cat="Booster">Booster</button>
+              <button type="button" class="pill-toggle" data-cat="Drone">Drone</button>
+              <button type="button" class="pill-toggle" data-cat="DefensiveTurret">DefensiveTurret</button>
+              <button type="button" class="pill-toggle" data-cat="Blueprint">Blueprint</button>
+            </div>
+          </div>
+
+          <div class="rule-form-grid">
+            <div class="rule-field">
+              <label for="rf-name-contains">Name Contains (comma-separated, matches ANY)</label>
+              <input id="rf-name-contains" class="filter-input" type="text" style="width:100%" placeholder="e.g. Microcell Swarm, Hailfire">
+            </div>
+            <div class="rule-field">
+              <label for="rf-name-excludes">Name Excludes (comma-separated)</label>
+              <input id="rf-name-excludes" class="filter-input" type="text" style="width:100%" placeholder="e.g. Salvage">
+            </div>
+            <div class="rule-field">
+              <label for="rf-aspect-contains">Aspect Contains (comma-separated, matches ANY)</label>
+              <input id="rf-aspect-contains" class="filter-input" type="text" list="rf-aspect-datalist" style="width:100%" placeholder="e.g. Punch Through">
+              <datalist id="rf-aspect-datalist"></datalist>
+            </div>
+          </div>
+
+          <div class="rule-field" style="margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+              <label style="margin:0">Workshop Reroll-Aware Substats ("N of M"):</label>
+              <label style="margin:0;display:flex;align-items:center;gap:5px">
+                Min Matches:
+                <input id="rf-substat-min" class="filter-input" type="number" min="1" value="2" style="width:64px">
+              </label>
+              <input id="rf-substat-search" class="filter-input" type="text" placeholder="Filter substats..." style="flex:1;min-width:160px">
+            </div>
+            <div id="rf-substat-selected" class="rule-pills" style="margin-bottom:6px"></div>
+            <div id="rf-substat-picker" class="stat-picker-list"></div>
+          </div>
+
+          <div id="rf-preview-box" class="preview-box hidden"></div>
         </div>
       </div>
     </div>
@@ -3709,10 +3724,24 @@
     }
   }
 
-  function openRuleEditor(idx, prefillRule) {
+  let editingRuleTarget = "autofav";
+
+  function getRuleListForTarget(target) {
+    if (target === "autosell") return autoSellRules;
+    if (target === "autobuy") return autoBuyRules;
+    return enhancedRules;
+  }
+
+  function openRuleEditor(idx, prefillRule, target) {
+    editingRuleTarget = target || "autofav";
     editingRuleIdx = idx;
-    const rule = prefillRule || (idx >= 0 ? enhancedRules[idx] : { name: "New Rule", enabled: true });
-    $("rule-editor-title").textContent = idx >= 0 ? "Edit Rule" : "New Rule";
+    const list = getRuleListForTarget(editingRuleTarget);
+    const labelMap = { autofav: "Auto-Favorite", autosell: "Auto-Sell", autobuy: "Auto-Buy" };
+    const rule = prefillRule || (idx >= 0 ? list[idx] : { name: "New " + labelMap[editingRuleTarget] + " Rule", enabled: true });
+    $("rule-editor-title").textContent = (idx >= 0 ? "Edit " : "New ") + labelMap[editingRuleTarget] + " Rule";
+    $("rf-autobuy-fields").classList.toggle("hidden", editingRuleTarget !== "autobuy");
+    $("rf-max-price").value = rule.maxPrice != null ? String(rule.maxPrice) : "";
+    $("rf-only-unknown-bp").checked = rule.onlyUnknownBlueprints !== false;
     $("rf-name").value = rule.name || "";
     $("rf-min-rarity").value = rule.minRarity || "";
     $("rf-max-rarity").value = rule.maxRarity || "";
@@ -3749,10 +3778,16 @@
   }
 
   function buildRuleFromForm() {
+    const list = getRuleListForTarget(editingRuleTarget);
     const rule = {
       name: ($("rf-name").value || "").trim() || "Unnamed Rule",
-      enabled: editingRuleIdx >= 0 ? (enhancedRules[editingRuleIdx].enabled !== false) : true
+      enabled: editingRuleIdx >= 0 && list[editingRuleIdx] ? (list[editingRuleIdx].enabled !== false) : true
     };
+    if (editingRuleTarget === "autobuy") {
+      rule.onlyUnknownBlueprints = $("rf-only-unknown-bp").checked;
+      const mp = $("rf-max-price").value.trim();
+      if (mp !== "") rule.maxPrice = Math.max(0, Number(mp));
+    }
     const cats = [];
     $("rf-categories").querySelectorAll(".pill-toggle.active").forEach((b) => cats.push(b.getAttribute("data-cat")));
     if (cats.length) rule.categories = cats;
@@ -3864,40 +3899,73 @@
     btn.addEventListener("click", () => btn.classList.toggle("active"));
   });
   $("rf-substat-search").addEventListener("input", renderSubstatPicker);
-  $("btn-enhanced-new-rule").addEventListener("click", () => openRuleEditor(-1));
+  $("btn-enhanced-new-rule").addEventListener("click", () => openRuleEditor(-1, null, "autofav"));
+  $("btn-autosell-new-rule").addEventListener("click", () => openRuleEditor(-1, null, "autosell"));
+  $("btn-autobuy-new-rule").addEventListener("click", () => openRuleEditor(-1, null, "autobuy"));
   $("btn-rule-cancel").addEventListener("click", closeRuleEditor);
   $("btn-rule-save").addEventListener("click", () => {
     const rule = buildRuleFromForm();
+    const target = editingRuleTarget;
+    const list = getRuleListForTarget(target);
     if (editingRuleIdx >= 0) {
-      enhancedRules[editingRuleIdx] = rule;
+      list[editingRuleIdx] = rule;
     } else {
-      enhancedRules.push(rule);
+      list.push(rule);
     }
     closeRuleEditor();
-    persistEnhancedRules("Saved rule '" + rule.name + "'.");
+    if (target === "autosell") {
+      persistAutoSellRules("Saved Auto-Sell rule '" + rule.name + "'.");
+    } else if (target === "autobuy") {
+      persistAutoBuyRules("Saved Auto-Buy rule '" + rule.name + "'.");
+    } else {
+      persistEnhancedRules("Saved rule '" + rule.name + "'.");
+    }
   });
 
   $("btn-rule-preview").addEventListener("click", async () => {
     const box = $("rf-preview-box");
     box.classList.remove("hidden");
-    box.innerHTML = '<span class="muted">Testing rule against player inventories...</span>';
+    const target = editingRuleTarget;
+    box.innerHTML = '<span class="muted">Testing rule...</span>';
     try {
       const rule = buildRuleFromForm();
-      const resp = await fetch("/api/enhanced/autofav/preview", {
+      const endpoint = target === "autosell" ? "/api/enhanced/autosell/preview"
+        : (target === "autobuy" ? "/api/enhanced/autobuy/preview" : "/api/enhanced/autofav/preview");
+      const payload = target === "autofav" ? { rule, includeFavourited: true } : { rule };
+      const resp = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rule, includeFavourited: true })
+        body: JSON.stringify(payload)
       });
       const data = await resp.json();
       if (!data.ok) {
         box.innerHTML = '<span class="neg">Preview error: ' + esc(data.error || "Unknown") + '</span>';
         return;
       }
+      if (target === "autobuy" && !data.dockedWithStore) {
+        box.innerHTML = '<span class="muted">Not currently docked at a station with a store.</span>';
+        return;
+      }
       const matches = data.matches || [];
       let html = '<div style="margin-bottom:6px;font-size:12px"><strong>' + matches.length + ' match(es)</strong> across ' +
-        data.itemsScanned + ' items (' + data.inventoriesScanned + ' inventories):</div>';
+        (data.itemsScanned || 0) + ' items' +
+        (target === "autosell" ? (' (est. +' + Math.round(data.totalCredits || 0).toLocaleString() + ' cr)') : '') +
+        (target === "autobuy" ? (' at ' + esc(data.stationName || "Station") + ' (est. -' + Math.round(data.totalCost || 0).toLocaleString() + ' cr)') : '') +
+        ':</div>';
       if (!matches.length) {
-        html += '<div class="muted" style="font-size:12px">No items currently in your inventories match this rule.</div>';
+        html += '<div class="muted" style="font-size:12px">No items currently match this rule.</div>';
+      } else if (target === "autosell") {
+        html += '<table class="data-table"><thead><tr><th>Item</th><th>iLvl</th><th>Category</th><th>Qty</th><th>Est. Credits</th></tr></thead><tbody>';
+        for (const m of matches.slice(0, 25)) {
+          html += '<tr><td class="rarity-' + esc(m.rarity || "Standard") + '">' + esc(m.displayName) + '</td><td class="mono">' + esc(m.itemLevel) + '</td><td>' + esc(m.category) + '</td><td class="mono">' + esc(m.count ?? 1) + '</td><td class="mono pos">+' + Math.round(m.credits || 0).toLocaleString() + '</td></tr>';
+        }
+        html += '</tbody></table>';
+      } else if (target === "autobuy") {
+        html += '<table class="data-table"><thead><tr><th>Item</th><th>iLvl</th><th>Category</th><th>Cost</th></tr></thead><tbody>';
+        for (const m of matches.slice(0, 25)) {
+          html += '<tr><td class="rarity-' + esc(m.rarity || "Standard") + '">' + esc(m.displayName) + '</td><td class="mono">' + esc(m.itemLevel) + '</td><td>' + esc(m.category) + '</td><td class="mono neg">-' + Math.round(m.cost || 0).toLocaleString() + '</td></tr>';
+        }
+        html += '</tbody></table>';
       } else {
         html += '<table class="data-table"><thead><tr><th>Item</th><th>iLvl</th><th>Category</th><th>Substats / Aspects</th><th>Status</th></tr></thead><tbody>';
         for (const m of matches.slice(0, 25)) {
@@ -3908,9 +3976,9 @@
             '</td><td>' + esc(m.category) + '</td><td style="font-size:11px">' + esc(details) + '</td><td>' + status + '</td></tr>';
         }
         html += '</tbody></table>';
-        if (matches.length > 25) {
-          html += '<div class="muted" style="font-size:11px;margin-top:4px">Showing first 25 of ' + matches.length + ' matches.</div>';
-        }
+      }
+      if (matches.length > 25) {
+        html += '<div class="muted" style="font-size:11px;margin-top:4px">Showing first 25 of ' + matches.length + ' matches.</div>';
       }
       box.innerHTML = html;
     } catch (e) {
@@ -4064,6 +4132,7 @@
             esc(r.name || ("Rule #" + (idx + 1))) +
           '</label>' +
           '<div style="display:flex;gap:6px">' +
+            '<button type="button" class="btn btn-asell-edit" data-idx="' + idx + '">Edit</button>' +
             '<button type="button" class="btn btn-asell-test" data-idx="' + idx + '">Test</button>' +
             '<button type="button" class="btn btn-danger btn-asell-del" data-idx="' + idx + '">Delete</button>' +
           '</div>' +
@@ -4077,6 +4146,9 @@
         autoSellRules[Number(chk.getAttribute("data-idx"))].enabled = chk.checked;
         persistAutoSellRules("Updated Auto-Sell rule.");
       });
+    });
+    el.querySelectorAll(".btn-asell-edit").forEach((btn) => {
+      btn.addEventListener("click", () => openRuleEditor(Number(btn.getAttribute("data-idx")), null, "autosell"));
     });
     el.querySelectorAll(".btn-asell-del").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -4230,6 +4302,7 @@
             esc(r.name || ("Rule #" + (idx + 1))) +
           '</label>' +
           '<div style="display:flex;gap:6px">' +
+            '<button type="button" class="btn btn-abuy-edit" data-idx="' + idx + '">Edit</button>' +
             '<button type="button" class="btn btn-abuy-test" data-idx="' + idx + '">Test Store</button>' +
             '<button type="button" class="btn btn-danger btn-abuy-del" data-idx="' + idx + '">Delete</button>' +
           '</div>' +
@@ -4243,6 +4316,9 @@
         autoBuyRules[Number(chk.getAttribute("data-idx"))].enabled = chk.checked;
         persistAutoBuyRules("Updated Auto-Buy rule.");
       });
+    });
+    el.querySelectorAll(".btn-abuy-edit").forEach((btn) => {
+      btn.addEventListener("click", () => openRuleEditor(Number(btn.getAttribute("data-idx")), null, "autobuy"));
     });
     el.querySelectorAll(".btn-abuy-del").forEach((btn) => {
       btn.addEventListener("click", () => {
