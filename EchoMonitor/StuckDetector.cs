@@ -20,6 +20,7 @@ namespace EchoMonitor
         private readonly List<(DateTime TimeUtc, string Poi, string Mission)> _emergencyWarps = new List<(DateTime, string, string)>();
         private readonly HashSet<string> _dismissedKeys = new HashSet<string>(StringComparer.Ordinal);
         private readonly Dictionary<string, DateTime> _battleFirstSeenUtc = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        private readonly Dictionary<string, DateTime> _incomingFleetFirstSeenUtc = new Dictionary<string, DateTime>(StringComparer.Ordinal);
         private readonly Dictionary<string, DateTime> _outpostFullFirstSeenUtc = new Dictionary<string, DateTime>(StringComparer.Ordinal);
 
         private string _badStationKey = string.Empty;
@@ -50,6 +51,10 @@ namespace EchoMonitor
                 {
                     _dismissedKeys.Add("empire_raid_" + bid);
                 }
+                foreach (var fid in _incomingFleetFirstSeenUtc.Keys)
+                {
+                    _dismissedKeys.Add("empire_incoming_" + fid);
+                }
                 foreach (var guid in _outpostFullFirstSeenUtc.Keys)
                 {
                     _dismissedKeys.Add("outpost_storage_full:" + guid);
@@ -64,6 +69,7 @@ namespace EchoMonitor
                 _emergencyWarps.Clear();
                 _dismissedKeys.Clear();
                 _battleFirstSeenUtc.Clear();
+                _incomingFleetFirstSeenUtc.Clear();
                 _outpostFullFirstSeenUtc.Clear();
                 _badStationKey = string.Empty;
                 _badStationFirstSeenUtc = DateTime.MinValue;
@@ -404,8 +410,135 @@ namespace EchoMonitor
                         _dismissedKeys.Remove("empire_raid_" + k);
                     }
                 }
+
+                // Also check incoming hostile fleets traveling to attack or raid player stations/systems
+                EvaluateIncomingEmpireAttacks(gp, now, activeItems);
             }
             catch { }
+        }
+
+        private void EvaluateIncomingEmpireAttacks(GamePlayer gp, DateTime now, List<AlertItem> activeItems)
+        {
+            try
+            {
+                var livingUniverse = gp.GetStoryteller<Source.Simulation.Story.LivingUniverse>();
+                if (livingUniverse == null) return;
+
+                var activeFleetIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var fleet in livingUniverse.AllFleets())
+                {
+                    if (fleet == null) continue;
+                    if (fleet.state != ConquestFleetState.Traveling) continue;
+                    if (fleet.orderReason != ConquestFleetOrderReason.Attacking &&
+                        fleet.orderReason != ConquestFleetOrderReason.Raiding) continue;
+                    if (fleet.faction == Faction.player) continue;
+
+                    var targetSystem = GalaxyMapData.current?.GetSystem(fleet.destinationSystemGuid);
+                    SpaceStation targetStation = ResolveIncomingTargetStation(fleet, targetSystem);
+
+                    bool isPlayerTarget =
+                        (fleet.raidTargetOwnerId == Faction.player?.identifier) ||
+                        (targetSystem != null && targetSystem.faction == Faction.player) ||
+                        (targetStation != null && (targetStation is PlayerStation || targetStation.faction == Faction.player));
+
+                    if (!isPlayerTarget) continue;
+
+                    string fid = !string.IsNullOrEmpty(fleet.guid) ? fleet.guid : (fleet.destinationSystemGuid ?? "unknown");
+                    activeFleetIds.Add(fid);
+                    string alertId = "empire_incoming_" + fid;
+
+                    DateTime firstSeen;
+                    bool dismissed;
+                    lock (_lock)
+                    {
+                        if (!_incomingFleetFirstSeenUtc.TryGetValue(fid, out firstSeen))
+                        {
+                            firstSeen = now;
+                            _incomingFleetFirstSeenUtc[fid] = firstSeen;
+                            _dismissedKeys.Remove(alertId);
+                        }
+                        dismissed = _dismissedKeys.Contains(alertId);
+                    }
+
+                    if (dismissed) continue;
+
+                    string rawAttacker = fleet.faction?.name ?? "Hostiles";
+                    string attacker = TranslateSafe(rawAttacker);
+                    string fleetName = TranslateSafe(fleet.displayName);
+                    string stationName = TranslateSafe(targetStation?.name ?? targetSystem?.name ?? "Empire Station");
+                    string systemName = TranslateSafe(targetSystem?.name ?? "Unknown System");
+                    string actionVerb = fleet.orderReason == ConquestFleetOrderReason.Raiding ? "raiding" : "attacking";
+
+                    string attackerLabel = !string.IsNullOrEmpty(fleetName) && !string.Equals(fleetName, attacker, StringComparison.OrdinalIgnoreCase)
+                        ? $"{attacker} ({fleetName})"
+                        : attacker;
+
+                    string detail = $"{attackerLabel} incoming ({actionVerb}) at {stationName} in {systemName}";
+                    float etaSeconds = Math.Max(0f, fleet.travelDuration * (1f - Math.Clamp(fleet.routeProgress, 0f, 1f)));
+                    if (etaSeconds > 0f)
+                    {
+                        int mins = (int)(etaSeconds / 60f);
+                        int secs = (int)(etaSeconds % 60f);
+                        detail += mins > 0 ? $" — ETA {mins}m {secs}s" : $" — ETA {secs}s";
+                    }
+
+                    activeItems.Add(new AlertItem
+                    {
+                        Id = alertId,
+                        Type = "EmpireRaidOrSiege",
+                        Severity = "critical",
+                        Title = $"Attack Incoming: {stationName}",
+                        Detail = detail,
+                        TriggeredAt = firstSeen.ToString("o")
+                    });
+                }
+
+                // Prune arrived/cancelled incoming fleets
+                lock (_lock)
+                {
+                    var ended = new List<string>();
+                    foreach (var k in _incomingFleetFirstSeenUtc.Keys)
+                    {
+                        if (!activeFleetIds.Contains(k)) ended.Add(k);
+                    }
+                    foreach (var k in ended)
+                    {
+                        _incomingFleetFirstSeenUtc.Remove(k);
+                        _dismissedKeys.Remove("empire_incoming_" + k);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static SpaceStation ResolveIncomingTargetStation(ConquestFleet fleet, SystemMapData targetSystem)
+        {
+            if (targetSystem?.pointsOfInterest == null) return null;
+
+            string preferredGuid = !string.IsNullOrEmpty(fleet.raidTargetGuid)
+                ? fleet.raidTargetGuid
+                : fleet.assaultTargetGuid;
+
+            if (!string.IsNullOrEmpty(preferredGuid))
+            {
+                foreach (var poi in targetSystem.pointsOfInterest)
+                {
+                    if (poi is SpaceStation ss && string.Equals(ss.guid, preferredGuid, StringComparison.Ordinal))
+                    {
+                        return ss;
+                    }
+                }
+            }
+
+            foreach (var poi in targetSystem.pointsOfInterest)
+            {
+                if (poi is SpaceStation ss && (ss is PlayerStation || ss.faction == Faction.player))
+                {
+                    return ss;
+                }
+            }
+
+            return null;
         }
 
         private static string TranslateSafe(string value)
