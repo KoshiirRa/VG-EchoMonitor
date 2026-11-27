@@ -26,6 +26,11 @@ namespace EchoMonitor
             Instance?._server?.UnregisterRoute(method, path);
         }
 
+        public static void BroadcastSseEvent(string eventName, string jsonData)
+        {
+            Instance?._server?.BroadcastEvent(eventName, jsonData);
+        }
+
         public static T RunOnMainThread<T>(Func<T> func, int timeoutMs = 5000)
         {
             var disp = Instance?._dispatcher;

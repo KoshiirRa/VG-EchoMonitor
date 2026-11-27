@@ -27,11 +27,22 @@ namespace EchoMonitor
         private readonly Func<string> _dismissAlertsJson;
         private readonly Func<string, string> _relieveOutpostJson;
 
+        private sealed class SseClient
+        {
+            public Stream Output { get; }
+            public SemaphoreSlim WriteLock { get; } = new SemaphoreSlim(1, 1);
+
+            public SseClient(Stream output)
+            {
+                Output = output;
+            }
+        }
+
         private HttpListener _listener;
         private CancellationTokenSource _cts;
         private Task _acceptLoopTask;
         private byte[] _cachedUiBytes;
-        private readonly ConcurrentDictionary<Guid, Stream> _sseClients = new ConcurrentDictionary<Guid, Stream>();
+        private readonly ConcurrentDictionary<Guid, SseClient> _sseClients = new ConcurrentDictionary<Guid, SseClient>();
         private readonly ConcurrentDictionary<string, Func<string, string>> _extensionRoutes =
             new ConcurrentDictionary<string, Func<string, string>>(StringComparer.OrdinalIgnoreCase);
 
@@ -101,6 +112,31 @@ namespace EchoMonitor
             _listener = null;
         }
 
+        public void BroadcastEvent(string eventName, string jsonData)
+        {
+            if (_sseClients.IsEmpty || string.IsNullOrWhiteSpace(eventName)) return;
+
+            string safeEvent = eventName.Replace("\r", string.Empty).Replace("\n", string.Empty).Trim();
+            string safeData = (jsonData ?? "{}").Replace("\r", string.Empty).Replace("\n", string.Empty);
+            byte[] payload = Encoding.UTF8.GetBytes($"event: {safeEvent}\ndata: {safeData}\n\n");
+
+            foreach (var kv in _sseClients)
+            {
+                var client = kv.Value;
+                if (!client.WriteLock.Wait(250)) continue;
+                try
+                {
+                    client.Output.Write(payload, 0, payload.Length);
+                    client.Output.Flush();
+                }
+                catch { }
+                finally
+                {
+                    try { client.WriteLock.Release(); } catch { }
+                }
+            }
+        }
+
         private void BroadcastShutdown()
         {
             if (_sseClients.IsEmpty) return;
@@ -108,13 +144,19 @@ namespace EchoMonitor
             bool sentAny = false;
             foreach (var kv in _sseClients)
             {
+                var client = kv.Value;
+                if (!client.WriteLock.Wait(250)) continue;
                 try
                 {
-                    kv.Value.Write(payload, 0, payload.Length);
-                    kv.Value.Flush();
+                    client.Output.Write(payload, 0, payload.Length);
+                    client.Output.Flush();
                     sentAny = true;
                 }
                 catch { }
+                finally
+                {
+                    try { client.WriteLock.Release(); } catch { }
+                }
             }
             _sseClients.Clear();
             if (sentAny)
@@ -353,17 +395,25 @@ namespace EchoMonitor
             resp.Headers["X-Accel-Buffering"] = "no";
             resp.SendChunked = true;
 
-            var output = resp.OutputStream;
+            var client = new SseClient(resp.OutputStream);
             var clientId = Guid.NewGuid();
-            _sseClients[clientId] = output;
+            _sseClients[clientId] = client;
             try
             {
                 while (!ct.IsCancellationRequested)
                 {
                     string json = _getStateJson();
                     byte[] payload = Encoding.UTF8.GetBytes($"data: {json}\n\n");
-                    await output.WriteAsync(payload, 0, payload.Length, ct).ConfigureAwait(false);
-                    await output.FlushAsync(ct).ConfigureAwait(false);
+                    await client.WriteLock.WaitAsync(ct).ConfigureAwait(false);
+                    try
+                    {
+                        await client.Output.WriteAsync(payload, 0, payload.Length, ct).ConfigureAwait(false);
+                        await client.Output.FlushAsync(ct).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        client.WriteLock.Release();
+                    }
                     await Task.Delay(2000, ct).ConfigureAwait(false);
                 }
             }
