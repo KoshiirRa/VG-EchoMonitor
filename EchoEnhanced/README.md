@@ -69,7 +69,9 @@ Save, manage, and apply fleet-wide drone presets across your entire fleet (`BepI
   - `POST /api/enhanced/drones/capture`
   - `POST /api/enhanced/drones/delete`
 
-### Natural Language Rule Generation
+### Natural Language Rule Generation (WIP — Backend Only)
+> **Note:** The core rule-compiler engine and HTTP API endpoints are in place, but Web UI and Discord bot wiring are not implemented yet.
+
 Compile plain-English instructions (e.g., *"Auto-buy any unknown ship blueprints under 500k credits"* or *"Favorite Legendary turrets iLvl 90+ with Punch Through or 2+ of Crit Damage, Reload Speed"*) into validated JSON rules for **Auto-Favorite**, **Auto-Sell**, or **Auto-Buy**.
 
 #### LLM Configuration
