@@ -132,6 +132,21 @@ namespace EchoMonitor
         public Dictionary<string, int> DepotRawMaterials { get; set; } = new Dictionary<string, int>();
         // Key: "itemId\u001fname" -> count across all active depots
         public Dictionary<string, int> DepotRefinedProducts { get; set; } = new Dictionary<string, int>();
+        // Unmerged immutable cached inventory snapshots (merged off the main thread in SessionManager)
+        public List<CachedInventorySnapshot> PendingInventorySnapshots { get; set; }
+    }
+
+    public sealed class CachedInventorySnapshot
+    {
+        public Dictionary<string, int> DogTagsByType { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+        public Dictionary<string, int> Modules { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+        public Dictionary<string, List<string>> ModuleSubstats { get; } = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        public Dictionary<string, List<ModuleAspectInfo>> ModuleAspects { get; } = new Dictionary<string, List<ModuleAspectInfo>>(StringComparer.Ordinal);
+        public Dictionary<string, int> LockedCrates { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+        public Dictionary<string, int> ShipBlueprintPieces { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+        public Dictionary<string, string> ShipSizes { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+        public Dictionary<string, string> ShipDisplayNames { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+        public Dictionary<string, int> ModuleBlueprintItems { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
     }
 
     public sealed class HistoryEntry

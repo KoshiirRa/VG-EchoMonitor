@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Behaviour.Item;
 using Behaviour.Item.Usable;
 using Behaviour.Managers;
@@ -36,6 +37,58 @@ namespace EchoMonitor
             AccessTools.Field(typeof(InventoryItemType), "equipmentState");
         private static readonly FieldInfo EquipmentViewField =
             AccessTools.Field(typeof(InventoryItemType), "view");
+
+        private enum CachedItemKind
+        {
+            Other,
+            DogTag,
+            Module,
+            LockedCrate,
+            ShipBlueprint,
+            ModuleBlueprint
+        }
+
+        private sealed class CachedItemMeta
+        {
+            public CachedItemKind Kind;
+            public int ItemLevel;
+            public string Key;
+            public List<string> Substats;
+            public List<ModuleAspectInfo> Aspects;
+            public string ShipId;
+            public string ShipSize;
+            public string ShipDisplayName;
+        }
+
+        private sealed class CachedInventoryScan
+        {
+            public Inventory Inventory;
+            public int SlotCount;
+            public double SpaceUsed;
+            public float LastScanTime;
+            public CachedInventorySnapshot Snapshot;
+        }
+
+        private const float MinInventoryRescanIntervalSec = 5.0f;
+        private const float SlowInventoryRescanIntervalSec = 60.0f;
+        private const float EmpireScanIntervalSec = 5.0f;
+
+        private static readonly ConditionalWeakTable<InventoryItemType, CachedItemMeta> ItemMetaCache =
+            new ConditionalWeakTable<InventoryItemType, CachedItemMeta>();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> TranslationCache =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
+
+        private readonly CachedInventoryScan _globalInvCache = new CachedInventoryScan();
+        private readonly CachedInventoryScan _dataInvCache = new CachedInventoryScan();
+
+        private float _lastEmpireScanTime = -999f;
+        private List<OutpostStorageInfo> _cachedOutposts;
+        private int _cachedDepotCount;
+        private double _cachedDepotSpaceUsed;
+        private double _cachedDepotCapacity;
+        private double _cachedDepotFillPct;
+        private Dictionary<string, int> _cachedDepotRawMaterials;
+        private Dictionary<string, int> _cachedDepotRefinedProducts;
 
         /// <summary>
         /// Must ONLY be called on the Unity main thread.
@@ -198,8 +251,24 @@ namespace EchoMonitor
             return list;
         }
 
-        private static EmpireStatus CollectEmpireStatus(GamePlayer gp, PlayerSnapshot snapshot)
+        private EmpireStatus CollectEmpireStatus(GamePlayer gp, PlayerSnapshot snapshot)
         {
+            float now = UnityEngine.Time.unscaledTime;
+            if (_cachedOutposts != null && (now - _lastEmpireScanTime) < EmpireScanIntervalSec)
+            {
+                if (_cachedDepotRawMaterials != null) snapshot.DepotRawMaterials = _cachedDepotRawMaterials;
+                if (_cachedDepotRefinedProducts != null) snapshot.DepotRefinedProducts = _cachedDepotRefinedProducts;
+                return new EmpireStatus
+                {
+                    Outposts = _cachedOutposts,
+                    DepotCount = _cachedDepotCount,
+                    DepotSpaceUsed = _cachedDepotSpaceUsed,
+                    DepotCapacity = _cachedDepotCapacity,
+                    DepotFillPct = _cachedDepotFillPct
+                };
+            }
+
+            _lastEmpireScanTime = now;
             var status = new EmpireStatus();
             try
             {
@@ -334,6 +403,14 @@ namespace EchoMonitor
                 status.DepotSpaceUsed = Math.Round(totalDepotUsed, 1);
                 status.DepotCapacity = Math.Round(totalDepotCap, 1);
                 status.DepotFillPct = totalDepotCap > 0 ? Math.Round((totalDepotUsed / totalDepotCap) * 100.0, 1) : 0.0;
+
+                _cachedOutposts = status.Outposts;
+                _cachedDepotCount = status.DepotCount;
+                _cachedDepotSpaceUsed = status.DepotSpaceUsed;
+                _cachedDepotCapacity = status.DepotCapacity;
+                _cachedDepotFillPct = status.DepotFillPct;
+                _cachedDepotRawMaterials = snapshot.DepotRawMaterials;
+                _cachedDepotRefinedProducts = snapshot.DepotRefinedProducts;
             }
             catch (Exception ex)
             {
@@ -517,10 +594,13 @@ namespace EchoMonitor
         {
             if (string.IsNullOrEmpty(value)) return string.Empty;
             if (!value.StartsWith("@", StringComparison.Ordinal)) return value;
+            if (TranslationCache.TryGetValue(value, out string cached)) return cached;
             try
             {
                 string translated = Translation.Translate(value);
-                return !string.IsNullOrEmpty(translated) ? translated : value;
+                string result = !string.IsNullOrEmpty(translated) ? translated : value;
+                TranslationCache[value] = result;
+                return result;
             }
             catch
             {
@@ -883,7 +963,7 @@ namespace EchoMonitor
             return m?.name ?? string.Empty;
         }
 
-        private static PlayerSnapshot CollectPlayerSnapshot(GamePlayer gp)
+        private PlayerSnapshot CollectPlayerSnapshot(GamePlayer gp)
         {
             var snap = new PlayerSnapshot
             {
@@ -927,111 +1007,42 @@ namespace EchoMonitor
                 }
             }
 
-            // Scan globalInventory, dataInventory, currentSpaceShip.cargo, and activeFleet cargo
-            // so loot & blueprints are tracked continuously both in-flight and after docking.
-            var inventories = new HashSet<Inventory>();
-            if (gp.globalInventory != null) inventories.Add(gp.globalInventory);
-            if (gp.dataInventory != null) inventories.Add(gp.dataInventory);
-            if (gp.currentSpaceShip?.cargo != null) inventories.Add(gp.currentSpaceShip.cargo);
+            // Scan globalInventory and dataInventory via change-detected immutable snapshots
+            // (merged off the main thread in SessionManager), while scanning active ship/fleet
+            // cargo directly every tick. Per-item metadata & reflection results are cached via ConditionalWeakTable.
+            if (gp.globalInventory != null)
+            {
+                ScanCachedInventory(gp.globalInventory, _globalInvCache, snap);
+            }
+            if (gp.dataInventory != null && !ReferenceEquals(gp.dataInventory, gp.globalInventory))
+            {
+                ScanCachedInventory(gp.dataInventory, _dataInvCache, snap);
+            }
+
+            var cargoInventories = new HashSet<Inventory>();
+            if (gp.currentSpaceShip?.cargo != null &&
+                !ReferenceEquals(gp.currentSpaceShip.cargo, gp.globalInventory) &&
+                !ReferenceEquals(gp.currentSpaceShip.cargo, gp.dataInventory))
+            {
+                cargoInventories.Add(gp.currentSpaceShip.cargo);
+            }
             if (gp.activeFleet != null)
             {
                 foreach (var fleetShip in gp.activeFleet)
                 {
-                    if (fleetShip?.cargo != null) inventories.Add(fleetShip.cargo);
+                    var cargo = fleetShip?.cargo;
+                    if (cargo != null &&
+                        !ReferenceEquals(cargo, gp.globalInventory) &&
+                        !ReferenceEquals(cargo, gp.dataInventory))
+                    {
+                        cargoInventories.Add(cargo);
+                    }
                 }
             }
 
-            foreach (var inv in inventories)
+            foreach (var inv in cargoInventories)
             {
-                if (inv?.items == null) continue;
-                foreach (var slot in inv.items)
-                {
-                    if (slot == null || slot.item == null || slot.count <= 0) continue;
-                    try
-                    {
-                        var item = slot.item;
-                        string id = item.identifier ?? string.Empty;
-
-                        if (DogTagIds.Contains(id))
-                        {
-                            snap.DogTagsByType[id] += slot.count;
-                            continue;
-                        }
-
-                        if (item.equipmentDefinition != null)
-                        {
-                            string name = TranslateIfNeeded(item.displayName ?? item.identifier ?? "Unknown");
-                            string rarity = item.rarity.ToString();
-                            int ilvl = item.itemLevel;
-                            string eqType = TranslateIfNeeded(item.equipmentDefinition.typeDisplayName);
-                            if (string.IsNullOrEmpty(eqType))
-                                eqType = TranslateIfNeeded("@EquipSlot" + item.equipmentDefinition.slot);
-                            if (string.IsNullOrEmpty(eqType))
-                                eqType = item.equipmentDefinition.name ?? string.Empty;
-                            string size = TranslateIfNeeded(item.equipmentDefinition.size.GetDisplayName());
-                            if (string.IsNullOrEmpty(size))
-                                size = item.equipmentDefinition.size.ToString();
-
-                            ExtractModuleDetails(item, out var substats, out var aspects);
-                            string sig = ComputeModuleSignature(substats, aspects);
-                            string key = $"{name}{SessionManager.KeySep}{rarity}{SessionManager.KeySep}{ilvl}{SessionManager.KeySep}{eqType}{SessionManager.KeySep}{size}{SessionManager.KeySep}{sig}";
-
-                            snap.Modules[key] = snap.Modules.TryGetValue(key, out int prev) ? prev + slot.count : slot.count;
-                            if (!snap.ModuleSubstats.ContainsKey(key))
-                            {
-                                snap.ModuleSubstats[key] = substats;
-                                snap.ModuleAspects[key] = aspects;
-                            }
-                            continue;
-                        }
-
-                        if (item.TryGetPart<LootBoxItem>(out _) || item.TryGetState<LootBoxState>(out _))
-                        {
-                            string name = TranslateIfNeeded(item.displayName ?? item.identifier ?? "Locked Crate");
-                            string rarity = item.rarity.ToString();
-                            int ilvl = item.itemLevel;
-                            string key = $"{name}{SessionManager.KeySep}{rarity}{SessionManager.KeySep}{ilvl}";
-                            snap.LockedCrates[key] = snap.LockedCrates.TryGetValue(key, out int prev) ? prev + slot.count : slot.count;
-                            continue;
-                        }
-
-                        if (item.TryGetState<ShipBlueprintState>(out var sbs) && sbs != null && !string.IsNullOrEmpty(sbs.shipId))
-                        {
-                            snap.ShipBlueprintPieces[sbs.shipId] =
-                                snap.ShipBlueprintPieces.TryGetValue(sbs.shipId, out int prev) ? prev + slot.count : slot.count;
-                            if (!snap.ShipSizes.ContainsKey(sbs.shipId) || !snap.ShipDisplayNames.ContainsKey(sbs.shipId))
-                            {
-                                var spaceShip = SpaceShip.Get(sbs.shipId);
-                                if (spaceShip != null)
-                                {
-                                    if (!snap.ShipSizes.ContainsKey(sbs.shipId))
-                                    {
-                                        snap.ShipSizes[sbs.shipId] = spaceShip.shipRoleType.GetShipType().ToString();
-                                    }
-                                    if (!snap.ShipDisplayNames.ContainsKey(sbs.shipId) && !string.IsNullOrEmpty(spaceShip.originalName))
-                                    {
-                                        snap.ShipDisplayNames[sbs.shipId] = TranslateIfNeeded(spaceShip.originalName);
-                                    }
-                                }
-                            }
-                            if (!snap.ShipDisplayNames.ContainsKey(sbs.shipId) && !string.IsNullOrEmpty(item.displayName))
-                            {
-                                snap.ShipDisplayNames[sbs.shipId] = TranslateIfNeeded(item.displayName);
-                            }
-                            continue;
-                        }
-
-                        if (item.TryGetState<BlueprintState>(out var bs) && bs != null && !string.IsNullOrEmpty(bs.blueprintName))
-                        {
-                            string disp = TranslateIfNeeded(item.displayName ?? bs.blueprintName);
-                            string rarity = item.rarity.ToString();
-                            string key = $"{disp}{SessionManager.KeySep}{bs.blueprintName}{SessionManager.KeySep}{bs.blueprintLevel}{SessionManager.KeySep}{rarity}";
-                            snap.ModuleBlueprintItems[key] =
-                                snap.ModuleBlueprintItems.TryGetValue(key, out int prev) ? prev + slot.count : slot.count;
-                        }
-                    }
-                    catch { }
-                }
+                ScanInventoryIntoSnapshot(inv, snap);
             }
 
             // Unlocked ship blueprints
@@ -1092,6 +1103,295 @@ namespace EchoMonitor
             }
 
             return snap;
+        }
+
+        private static void ScanCachedInventory(Inventory inv, CachedInventoryScan cache, PlayerSnapshot snap)
+        {
+            if (inv?.items == null) return;
+
+            int count = (inv.items as System.Collections.ICollection)?.Count ?? -1;
+            double spaceUsed = inv.spaceUsed;
+            float now = UnityEngine.Time.unscaledTime;
+            float elapsed = now - cache.LastScanTime;
+
+            bool sameInventory = ReferenceEquals(cache.Inventory, inv);
+            bool changed = !sameInventory
+                || cache.SlotCount != count
+                || Math.Abs(cache.SpaceUsed - spaceUsed) > 0.0001;
+
+            bool needsRescan = cache.Snapshot == null
+                || !sameInventory
+                || (changed && elapsed >= MinInventoryRescanIntervalSec)
+                || elapsed >= SlowInventoryRescanIntervalSec;
+
+            if (needsRescan)
+            {
+                var newSnap = new CachedInventorySnapshot();
+                cache.Inventory = inv;
+                cache.SlotCount = count;
+                cache.SpaceUsed = spaceUsed;
+                cache.LastScanTime = now;
+
+                foreach (var slot in inv.items)
+                {
+                    if (slot == null || slot.item == null || slot.count <= 0) continue;
+                    try
+                    {
+                        var meta = GetOrBuildItemMeta(slot.item);
+                        ApplyItemMeta(
+                            meta,
+                            slot.count,
+                            newSnap.DogTagsByType,
+                            newSnap.Modules,
+                            newSnap.ModuleSubstats,
+                            newSnap.ModuleAspects,
+                            newSnap.LockedCrates,
+                            newSnap.ShipBlueprintPieces,
+                            newSnap.ShipSizes,
+                            newSnap.ShipDisplayNames,
+                            newSnap.ModuleBlueprintItems);
+                    }
+                    catch { }
+                }
+
+                cache.Snapshot = newSnap;
+            }
+
+            if (cache.Snapshot != null)
+            {
+                if (snap.PendingInventorySnapshots == null)
+                {
+                    snap.PendingInventorySnapshots = new List<CachedInventorySnapshot>(2);
+                }
+                snap.PendingInventorySnapshots.Add(cache.Snapshot);
+            }
+        }
+
+        private static void ScanInventoryIntoSnapshot(Inventory inv, PlayerSnapshot snap)
+        {
+            if (inv?.items == null) return;
+            foreach (var slot in inv.items)
+            {
+                if (slot == null || slot.item == null || slot.count <= 0) continue;
+                try
+                {
+                    var meta = GetOrBuildItemMeta(slot.item);
+                    ApplyItemMeta(
+                        meta,
+                        slot.count,
+                        snap.DogTagsByType,
+                        snap.Modules,
+                        snap.ModuleSubstats,
+                        snap.ModuleAspects,
+                        snap.LockedCrates,
+                        snap.ShipBlueprintPieces,
+                        snap.ShipSizes,
+                        snap.ShipDisplayNames,
+                        snap.ModuleBlueprintItems);
+                }
+                catch { }
+            }
+        }
+
+        public static void MergePendingInventories(PlayerSnapshot snap)
+        {
+            if (snap?.PendingInventorySnapshots == null || snap.PendingInventorySnapshots.Count == 0)
+            {
+                return;
+            }
+
+            var pending = snap.PendingInventorySnapshots;
+            snap.PendingInventorySnapshots = null;
+
+            for (int i = 0; i < pending.Count; i++)
+            {
+                MergeCachedInventory(pending[i], snap);
+            }
+        }
+
+        private static void MergeCachedInventory(CachedInventorySnapshot cache, PlayerSnapshot snap)
+        {
+            foreach (var kv in cache.DogTagsByType)
+            {
+                snap.DogTagsByType[kv.Key] = snap.DogTagsByType.TryGetValue(kv.Key, out int prev) ? prev + kv.Value : kv.Value;
+            }
+            foreach (var kv in cache.Modules)
+            {
+                snap.Modules[kv.Key] = snap.Modules.TryGetValue(kv.Key, out int prev) ? prev + kv.Value : kv.Value;
+            }
+            foreach (var kv in cache.ModuleSubstats)
+            {
+                if (!snap.ModuleSubstats.ContainsKey(kv.Key))
+                    snap.ModuleSubstats[kv.Key] = kv.Value;
+            }
+            foreach (var kv in cache.ModuleAspects)
+            {
+                if (!snap.ModuleAspects.ContainsKey(kv.Key))
+                    snap.ModuleAspects[kv.Key] = kv.Value;
+            }
+            foreach (var kv in cache.LockedCrates)
+            {
+                snap.LockedCrates[kv.Key] = snap.LockedCrates.TryGetValue(kv.Key, out int prev) ? prev + kv.Value : kv.Value;
+            }
+            foreach (var kv in cache.ShipBlueprintPieces)
+            {
+                snap.ShipBlueprintPieces[kv.Key] = snap.ShipBlueprintPieces.TryGetValue(kv.Key, out int prev) ? prev + kv.Value : kv.Value;
+            }
+            foreach (var kv in cache.ShipSizes)
+            {
+                if (!snap.ShipSizes.ContainsKey(kv.Key))
+                    snap.ShipSizes[kv.Key] = kv.Value;
+            }
+            foreach (var kv in cache.ShipDisplayNames)
+            {
+                if (!snap.ShipDisplayNames.ContainsKey(kv.Key))
+                    snap.ShipDisplayNames[kv.Key] = kv.Value;
+            }
+            foreach (var kv in cache.ModuleBlueprintItems)
+            {
+                snap.ModuleBlueprintItems[kv.Key] = snap.ModuleBlueprintItems.TryGetValue(kv.Key, out int prev) ? prev + kv.Value : kv.Value;
+            }
+        }
+
+        private static void ApplyItemMeta(
+            CachedItemMeta meta,
+            int count,
+            Dictionary<string, int> dogTags,
+            Dictionary<string, int> modules,
+            Dictionary<string, List<string>> moduleSubstats,
+            Dictionary<string, List<ModuleAspectInfo>> moduleAspects,
+            Dictionary<string, int> lockedCrates,
+            Dictionary<string, int> shipBpPieces,
+            Dictionary<string, string> shipSizes,
+            Dictionary<string, string> shipDisplayNames,
+            Dictionary<string, int> moduleBpItems)
+        {
+            switch (meta.Kind)
+            {
+                case CachedItemKind.DogTag:
+                    dogTags[meta.Key] = dogTags.TryGetValue(meta.Key, out int dtPrev) ? dtPrev + count : count;
+                    break;
+                case CachedItemKind.Module:
+                    modules[meta.Key] = modules.TryGetValue(meta.Key, out int modPrev) ? modPrev + count : count;
+                    if (!moduleSubstats.ContainsKey(meta.Key))
+                    {
+                        moduleSubstats[meta.Key] = meta.Substats;
+                        moduleAspects[meta.Key] = meta.Aspects;
+                    }
+                    break;
+                case CachedItemKind.LockedCrate:
+                    lockedCrates[meta.Key] = lockedCrates.TryGetValue(meta.Key, out int cratePrev) ? cratePrev + count : count;
+                    break;
+                case CachedItemKind.ShipBlueprint:
+                    shipBpPieces[meta.ShipId] = shipBpPieces.TryGetValue(meta.ShipId, out int sbpPrev) ? sbpPrev + count : count;
+                    if (!string.IsNullOrEmpty(meta.ShipSize) && !shipSizes.ContainsKey(meta.ShipId))
+                        shipSizes[meta.ShipId] = meta.ShipSize;
+                    if (!string.IsNullOrEmpty(meta.ShipDisplayName) && !shipDisplayNames.ContainsKey(meta.ShipId))
+                        shipDisplayNames[meta.ShipId] = meta.ShipDisplayName;
+                    break;
+                case CachedItemKind.ModuleBlueprint:
+                    moduleBpItems[meta.Key] = moduleBpItems.TryGetValue(meta.Key, out int mbpPrev) ? mbpPrev + count : count;
+                    break;
+            }
+        }
+
+        private static CachedItemMeta GetOrBuildItemMeta(InventoryItemType item)
+        {
+            if (ItemMetaCache.TryGetValue(item, out var cached))
+            {
+                if (cached.Kind != CachedItemKind.Module || cached.ItemLevel == item.itemLevel)
+                {
+                    return cached;
+                }
+                ItemMetaCache.Remove(item);
+            }
+
+            var meta = BuildItemMeta(item);
+            ItemMetaCache.Add(item, meta);
+            return meta;
+        }
+
+        private static CachedItemMeta BuildItemMeta(InventoryItemType item)
+        {
+            string id = item.identifier ?? string.Empty;
+
+            if (DogTagIds.Contains(id))
+            {
+                return new CachedItemMeta { Kind = CachedItemKind.DogTag, Key = id };
+            }
+
+            if (item.equipmentDefinition != null)
+            {
+                string name = TranslateIfNeeded(item.displayName ?? item.identifier ?? "Unknown");
+                string rarity = item.rarity.ToString();
+                int ilvl = item.itemLevel;
+                string eqType = TranslateIfNeeded(item.equipmentDefinition.typeDisplayName);
+                if (string.IsNullOrEmpty(eqType))
+                    eqType = TranslateIfNeeded("@EquipSlot" + item.equipmentDefinition.slot);
+                if (string.IsNullOrEmpty(eqType))
+                    eqType = item.equipmentDefinition.name ?? string.Empty;
+                string size = TranslateIfNeeded(item.equipmentDefinition.size.GetDisplayName());
+                if (string.IsNullOrEmpty(size))
+                    size = item.equipmentDefinition.size.ToString();
+
+                ExtractModuleDetails(item, out var substats, out var aspects);
+                string sig = ComputeModuleSignature(substats, aspects);
+                string key = $"{name}{SessionManager.KeySep}{rarity}{SessionManager.KeySep}{ilvl}{SessionManager.KeySep}{eqType}{SessionManager.KeySep}{size}{SessionManager.KeySep}{sig}";
+
+                return new CachedItemMeta
+                {
+                    Kind = CachedItemKind.Module,
+                    ItemLevel = ilvl,
+                    Key = key,
+                    Substats = substats,
+                    Aspects = aspects
+                };
+            }
+
+            if (item.TryGetPart<LootBoxItem>(out _) || item.TryGetState<LootBoxState>(out _))
+            {
+                string name = TranslateIfNeeded(item.displayName ?? item.identifier ?? "Locked Crate");
+                string rarity = item.rarity.ToString();
+                int ilvl = item.itemLevel;
+                string key = $"{name}{SessionManager.KeySep}{rarity}{SessionManager.KeySep}{ilvl}";
+                return new CachedItemMeta { Kind = CachedItemKind.LockedCrate, Key = key };
+            }
+
+            if (item.TryGetState<ShipBlueprintState>(out var sbs) && sbs != null && !string.IsNullOrEmpty(sbs.shipId))
+            {
+                string shipSize = string.Empty;
+                string shipDisp = string.Empty;
+                var spaceShip = SpaceShip.Get(sbs.shipId);
+                if (spaceShip != null)
+                {
+                    shipSize = spaceShip.shipRoleType.GetShipType().ToString();
+                    if (!string.IsNullOrEmpty(spaceShip.originalName))
+                    {
+                        shipDisp = TranslateIfNeeded(spaceShip.originalName);
+                    }
+                }
+                if (string.IsNullOrEmpty(shipDisp) && !string.IsNullOrEmpty(item.displayName))
+                {
+                    shipDisp = TranslateIfNeeded(item.displayName);
+                }
+                return new CachedItemMeta
+                {
+                    Kind = CachedItemKind.ShipBlueprint,
+                    ShipId = sbs.shipId,
+                    ShipSize = shipSize,
+                    ShipDisplayName = shipDisp
+                };
+            }
+
+            if (item.TryGetState<BlueprintState>(out var bs) && bs != null && !string.IsNullOrEmpty(bs.blueprintName))
+            {
+                string disp = TranslateIfNeeded(item.displayName ?? bs.blueprintName);
+                string rarity = item.rarity.ToString();
+                string key = $"{disp}{SessionManager.KeySep}{bs.blueprintName}{SessionManager.KeySep}{bs.blueprintLevel}{SessionManager.KeySep}{rarity}";
+                return new CachedItemMeta { Kind = CachedItemKind.ModuleBlueprint, Key = key };
+            }
+
+            return new CachedItemMeta { Kind = CachedItemKind.Other };
         }
 
         private static void ExtractModuleDetails(

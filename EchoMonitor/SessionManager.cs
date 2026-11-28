@@ -90,6 +90,8 @@ namespace EchoMonitor
                 return JsonUtil.SerializeStateResponse(false, string.Empty, string.Empty, 0.0, null, null, null, null, null, null, null, null, null, null, null);
             }
 
+            TelemetryCollector.MergePendingInventories(telemetry.Snapshot);
+
             lock (_lock)
             {
                 EnsureSessionLoaded(telemetry.Snapshot);
@@ -397,6 +399,7 @@ namespace EchoMonitor
 
         public (string SaveId, string SessionStartedAt) ResetSession(PlayerSnapshot current)
         {
+            TelemetryCollector.MergePendingInventories(current);
             lock (_lock)
             {
                 if (current == null)
