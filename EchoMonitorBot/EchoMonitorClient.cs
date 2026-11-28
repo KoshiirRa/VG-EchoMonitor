@@ -102,7 +102,8 @@ public sealed class EchoMonitorClient : IDisposable
         Func<Task> onConnected,
         Func<JsonDocument, Task> onState,
         Func<string, Task> onCleanShutdown,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<string, JsonDocument, Task>? onCustomEvent = null)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{_config.EchoMonitorUrl}/api/events");
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
@@ -172,7 +173,17 @@ public sealed class EchoMonitorClient : IDisposable
                 try
                 {
                     var doc = JsonDocument.Parse(payload);
-                    await onState(doc);
+                    if (!string.IsNullOrEmpty(currentEvent))
+                    {
+                        if (onCustomEvent != null)
+                            await onCustomEvent(currentEvent, doc);
+                        else
+                            doc.Dispose();
+                    }
+                    else
+                    {
+                        await onState(doc);
+                    }
                 }
                 catch
                 {

@@ -24,6 +24,8 @@ namespace EchoMonitor.Patches
         public static Action<string, int> OnEmpireCrafted { get; set; }
         public static Action<long, long, long> OnEmpireTradeRun { get; set; }
         public static Action<long> OnEmpireSale { get; set; }
+        public static Action<KillRecord> OnEnemyKilled { get; set; }
+        public static Action<WaveRecord> OnWaveSpawned { get; set; }
 
         private static readonly ConcurrentDictionary<Mission, string> PendingFailReasons = new ConcurrentDictionary<Mission, string>();
 
@@ -84,6 +86,17 @@ namespace EchoMonitor.Patches
                 harmony,
                 AccessTools.Method("Source.Galaxy.EmpireLogStations:OnCrafted", new[] { typeof(PlayerStation), typeof(InventoryItemType), typeof(int) }),
                 postfix: new HarmonyMethod(typeof(EchoPatches), nameof(EmpireOnCraftedPostfix)));
+
+            TryPatch(
+                harmony,
+                AccessTools.Method("Behaviour.Unit.AbstractUnit:HandleHullDestroyed"),
+                postfix: new HarmonyMethod(typeof(EchoPatches), nameof(EnemyShipRemovedPostfix)));
+
+            TryPatch(
+                harmony,
+                AccessTools.Method("Source.Galaxy.MapTriggeredPayload:TriggerPayload"),
+                postfix: null,
+                prefix: new HarmonyMethod(typeof(EchoPatches), nameof(TriggerPayloadPrefix)));
         }
 
         private static void TryPatch(Harmony harmony, MethodBase target, HarmonyMethod postfix, HarmonyMethod prefix = null)
@@ -176,13 +189,19 @@ namespace EchoMonitor.Patches
                     : (reason ?? string.Empty);
 
                 string stationName = string.Empty;
+                string missionPoiName = string.Empty;
                 string systemName = string.Empty;
                 string sectorName = string.Empty;
                 var boardMissions = new List<MissionBoardEntry>();
+                var targetPoi = mission.GetActivePoi() ?? mission.mostRecentStep?.GetMissionPoi();
+                if (targetPoi != null)
+                {
+                    missionPoiName = TranslateIfNeeded(targetPoi.name);
+                }
                 var gp = GamePlayer.current;
                 if (gp != null)
                 {
-                    var sys = gp.currentSystem;
+                    var sys = targetPoi?.system ?? gp.currentSystem;
                     if (gp.currentPointOfInterest is SpaceStation st)
                     {
                         stationName = TranslateIfNeeded(st.name);
@@ -222,6 +241,7 @@ namespace EchoMonitor.Patches
                     IsStory = !string.IsNullOrWhiteSpace(mission.storyId),
                     Reason = translatedReason,
                     StationName = stationName,
+                    MissionPoiName = missionPoiName,
                     SystemName = systemName,
                     SectorName = sectorName,
                     BoardMissions = boardMissions
@@ -320,6 +340,176 @@ namespace EchoMonitor.Patches
             try
             {
                 OnEmpireCrafted.Invoke(ResolveItemName(item), amount);
+            }
+            catch { }
+        }
+
+        private static string GetActiveMissionName(GamePlayer gp)
+        {
+            if (gp == null) return string.Empty;
+            string raw = gp.infiniteMission?.name
+                ?? gp.currentBounty?.name
+                ?? gp.currentPatrol?.name
+                ?? gp.currentIndustry?.name
+                ?? string.Empty;
+            return TranslateIfNeeded(raw);
+        }
+
+        private static string ResolveUnitClassName(Behaviour.Unit.AbstractUnit unit, Source.Data.AbstractUnitData data)
+        {
+            if (data is SpaceShipData ssd && ssd.shipClass != null)
+            {
+                string dn = TranslateIfNeeded(ssd.shipClass.displayName);
+                if (!string.IsNullOrWhiteSpace(dn)) return dn;
+                if (!string.IsNullOrWhiteSpace(ssd.shipClass.name)) return ssd.shipClass.name;
+            }
+            if (data?.unitDefinition != null)
+            {
+                string raw = TranslateIfNeeded(data.unitDefinition.name);
+                if (!string.IsNullOrWhiteSpace(raw)) return raw;
+            }
+            if (unit != null)
+            {
+                string uName = unit.name ?? string.Empty;
+                if (uName.EndsWith("(Clone)", StringComparison.Ordinal))
+                {
+                    uName = uName.Substring(0, uName.Length - 7).Trim();
+                }
+                if (!string.IsNullOrWhiteSpace(uName)) return uName;
+            }
+            return "Unknown";
+        }
+
+        private static void EnemyShipRemovedPostfix(Behaviour.Unit.AbstractUnit __instance, Behaviour.Weapons.DamageData damageData)
+        {
+            if (__instance == null || OnEnemyKilled == null) return;
+            try
+            {
+                if (__instance is Behaviour.Unit.Torpedo) return;
+                var data = __instance.unitData;
+                if (data == null || !data.IsPlayerEnemy()) return;
+
+                bool isDrone = __instance is Behaviour.Unit.Drone;
+                string victimClass = ResolveUnitClassName(__instance, data);
+                string victimName = victimClass;
+                string victimSize = isDrone ? "Drone" : "Ship";
+
+                string victimRank = data.unitRank.ToString();
+                int victimLevel = data.level;
+                string victimFaction = TranslateIfNeeded(data.faction?.name);
+
+                string killerName = "Fleet";
+                string killerClass = string.Empty;
+                if (damageData?.sourceUnit != null)
+                {
+                    var ku = damageData.sourceUnit;
+                    var kd = ku.unitData;
+                    killerClass = ResolveUnitClassName(ku, kd);
+                    if (kd is SpaceShipData kssd && !string.IsNullOrWhiteSpace(kssd.name))
+                    {
+                        killerName = TranslateIfNeeded(kssd.name);
+                    }
+                    else
+                    {
+                        killerName = killerClass;
+                    }
+                }
+
+                string weaponName = string.Empty;
+                if (damageData?.sourceTurret != null)
+                {
+                    weaponName = TranslateIfNeeded(damageData.sourceTurret.name);
+                    if (weaponName.EndsWith("(Clone)", StringComparison.Ordinal))
+                    {
+                        weaponName = weaponName.Substring(0, weaponName.Length - 7).Trim();
+                    }
+                }
+
+                var gp = GamePlayer.current;
+                string sysName = TranslateIfNeeded(gp?.currentSystem?.name);
+                string poiName = TranslateIfNeeded(gp?.currentPointOfInterest?.name);
+                string missionName = GetActiveMissionName(gp);
+
+                OnEnemyKilled.Invoke(new KillRecord
+                {
+                    Timestamp = DateTime.UtcNow.ToString("o"),
+                    VictimName = victimName,
+                    VictimClass = victimClass,
+                    VictimSize = victimSize,
+                    VictimRank = victimRank,
+                    VictimLevel = victimLevel,
+                    VictimFaction = victimFaction,
+                    IsDrone = isDrone,
+                    KillerName = killerName,
+                    KillerClass = killerClass,
+                    WeaponName = weaponName,
+                    SystemName = sysName,
+                    PoiName = poiName,
+                    MissionName = missionName,
+                    PointValue = __instance.pointValue
+                });
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"EchoPatches.EnemyShipRemovedPostfix error: {ex.Message}");
+            }
+        }
+
+        private static void TriggerPayloadPrefix(Source.Galaxy.MapTriggeredPayload __instance)
+        {
+            if (__instance == null || OnWaveSpawned == null) return;
+            try
+            {
+                if (!__instance.HasEnemyReinforcements()) return;
+                var units = __instance.units;
+                if (units == null || units.Count == 0) return;
+
+                var grouped = new Dictionary<string, WaveUnitSummary>(StringComparer.OrdinalIgnoreCase);
+                int enemyCount = 0;
+                for (int i = 0; i < units.Count; i++)
+                {
+                    var u = units[i];
+                    if (u == null || !u.IsPlayerEnemy()) continue;
+                    enemyCount++;
+                    string cls = ResolveUnitClassName(null, u);
+                    string rank = u.unitRank.ToString();
+                    int lvl = u.level;
+                    string key = $"{cls}|{rank}|{lvl}";
+                    if (grouped.TryGetValue(key, out var existing))
+                    {
+                        existing.Count++;
+                    }
+                    else
+                    {
+                        grouped[key] = new WaveUnitSummary
+                        {
+                            ShipClass = cls,
+                            Rank = rank,
+                            Level = lvl,
+                            Count = 1
+                        };
+                    }
+                }
+
+                if (enemyCount == 0) return;
+
+                var gp = GamePlayer.current;
+                string sysName = TranslateIfNeeded(gp?.currentSystem?.name);
+                string poiName = TranslateIfNeeded(gp?.currentPointOfInterest?.name);
+                string missionName = GetActiveMissionName(gp);
+
+                var summaryList = new List<WaveUnitSummary>(grouped.Values);
+                summaryList.Sort((a, b) => b.Count.CompareTo(a.Count));
+
+                OnWaveSpawned.Invoke(new WaveRecord
+                {
+                    Timestamp = DateTime.UtcNow.ToString("o"),
+                    SystemName = sysName,
+                    PoiName = poiName,
+                    MissionName = missionName,
+                    UnitCount = enemyCount,
+                    Units = summaryList
+                });
             }
             catch { }
         }

@@ -270,13 +270,15 @@ namespace EchoMonitor
                 return new RecoveryResult { Ok = false, Message = "TravelManager is not available." };
             }
 
-            var battleManager = gp.GetStoryteller<Source.Simulation.Story.LivingUniverse>()?.battleManager;
-            if (battleManager?.activeBattles == null)
+            var livingUniverse = gp.GetStoryteller<Source.Simulation.Story.LivingUniverse>();
+            var battleManager = livingUniverse?.battleManager;
+            if (livingUniverse == null)
             {
-                return new RecoveryResult { Ok = false, Message = "No active Empire raids or sieges found." };
+                return new RecoveryResult { Ok = false, Message = "No active or incoming Empire raids or sieges found." };
             }
 
             MapPointOfInterest targetVenue = null;
+            if (battleManager?.activeBattles != null)
             foreach (var battle in battleManager.activeBattles)
             {
                 if (battle == null || battle.stage == 0) continue;
@@ -312,10 +314,34 @@ namespace EchoMonitor
 
             if (targetVenue == null)
             {
+                // Fall back to incoming hostile fleets heading to attack or raid a player station/system
+                foreach (var fleet in livingUniverse.AllFleets())
+                {
+                    if (fleet == null) continue;
+                    if (fleet.state != ConquestFleetState.Traveling) continue;
+                    if (fleet.orderReason != ConquestFleetOrderReason.Attacking &&
+                        fleet.orderReason != ConquestFleetOrderReason.Raiding) continue;
+                    if (fleet.faction == Faction.player) continue;
+
+                    var targetSystem = GalaxyMapData.current?.GetSystem(fleet.destinationSystemGuid);
+                    var targetStation = StuckDetector.ResolveIncomingTargetStation(fleet, targetSystem);
+                    bool isPlayerTarget =
+                        (fleet.raidTargetOwnerId == Faction.player?.identifier) ||
+                        (targetSystem != null && targetSystem.faction == Faction.player) ||
+                        (targetStation != null && (targetStation is PlayerStation || targetStation.faction == Faction.player));
+
+                    if (!isPlayerTarget || targetStation == null) continue;
+                    targetVenue = targetStation;
+                    break;
+                }
+            }
+
+            if (targetVenue == null)
+            {
                 return new RecoveryResult
                 {
                     Ok = false,
-                    Message = "No active Empire raid or siege target found to warp to.",
+                    Message = "No active or incoming Empire raid or siege target found to warp to.",
                     EchoEnabled = gp.autoPlay
                 };
             }

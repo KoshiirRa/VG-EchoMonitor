@@ -324,6 +324,7 @@ namespace EchoMonitor
         public bool IsStory { get; set; }
         public string Reason { get; set; } = string.Empty;
         public string StationName { get; set; } = string.Empty;
+        public string MissionPoiName { get; set; } = string.Empty;
         public string SystemName { get; set; } = string.Empty;
         public string SectorName { get; set; } = string.Empty;
         public List<MissionBoardEntry> BoardMissions { get; set; } = new List<MissionBoardEntry>();

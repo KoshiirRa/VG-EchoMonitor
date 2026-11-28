@@ -227,7 +227,14 @@ public static class Program
                             cts.Cancel();
                         }
                     },
-                    ct: ct);
+                    ct: ct,
+                    onCustomEvent: async (eventName, doc) =>
+                    {
+                        using (doc)
+                        {
+                            await HandleCustomEventAsync(eventName, doc.RootElement, ct);
+                        }
+                    });
 
                 if (cleanShutdown && _config.ExitOnCleanShutdown)
                     break;
@@ -283,6 +290,95 @@ public static class Program
 
         await CheckAlertsAsync(state, ct);
         await CheckLootAndBpsAsync(state, ct);
+    }
+
+    private static async Task HandleCustomEventAsync(string eventName, JsonElement root, CancellationToken ct)
+    {
+        if (!string.Equals(eventName, "enhanced_alert", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        string kind = GetStr(root, "kind");
+        string stationName = GetStr(root, "stationName");
+        string stationSuffix = string.IsNullOrEmpty(stationName) ? string.Empty : $" at {stationName}";
+
+        if (string.Equals(kind, "autobuy", StringComparison.OrdinalIgnoreCase))
+        {
+            int count = GetInt(root, "count");
+            long totalCost = GetLong(root, "totalCost");
+            var lines = new List<string>
+            {
+                $"Spent **${FmtNum(totalCost)}** on **{count} {(count == 1 ? "item" : "items")}**{stationSuffix}:"
+            };
+
+            if (TryGetArr(root, "items", out var items))
+            {
+                int totalEntries = items.GetArrayLength();
+                int shown = 0;
+                foreach (var it in items.EnumerateArray())
+                {
+                    if (shown++ >= 10) break;
+                    string name = GetStr(it, "displayName", "Unknown Item");
+                    string rarity = GetStr(it, "rarity");
+                    int ilvl = GetInt(it, "itemLevel");
+                    string rule = GetStr(it, "ruleName");
+                    long cost = GetLong(it, "cost");
+                    string ilvlTag = ilvl > 0 ? $" (iLvl {ilvl})" : string.Empty;
+                    string rarityTag = !string.IsNullOrEmpty(rarity) && !string.Equals(rarity, "None", StringComparison.OrdinalIgnoreCase)
+                        ? $"[{rarity}] "
+                        : string.Empty;
+                    string ruleTag = !string.IsNullOrEmpty(rule) ? $" *({rule})*" : string.Empty;
+                    lines.Add($"- **{rarityTag}{name}**{ilvlTag} — ${FmtNum(cost)}{ruleTag}");
+                }
+                if (totalEntries > 10)
+                    lines.Add($"*...and {totalEntries - 10} more*");
+            }
+
+            var embed = MakeEmbed(
+                $"Auto-Buy — {count} {(count == 1 ? "Item" : "Items")} Purchased",
+                Truncate(string.Join("\n", lines), 4000),
+                0x06B6D4);
+            await _discord.PostChannelMessageAsync(embed, ct: ct);
+        }
+        else if (string.Equals(kind, "autosell", StringComparison.OrdinalIgnoreCase))
+        {
+            int count = GetInt(root, "count");
+            long totalCredits = GetLong(root, "totalCredits");
+            var lines = new List<string>
+            {
+                $"Earned **+${FmtNum(totalCredits)}** from **{count} {(count == 1 ? "item" : "items")}**{stationSuffix}:"
+            };
+
+            if (TryGetArr(root, "items", out var items))
+            {
+                int totalEntries = items.GetArrayLength();
+                int shown = 0;
+                foreach (var it in items.EnumerateArray())
+                {
+                    if (shown++ >= 10) break;
+                    string name = GetStr(it, "displayName", "Unknown Item");
+                    string rarity = GetStr(it, "rarity");
+                    int ilvl = GetInt(it, "itemLevel");
+                    int qty = Math.Max(1, GetInt(it, "count"));
+                    string rule = GetStr(it, "ruleName");
+                    long credits = GetLong(it, "credits");
+                    string qtyTag = qty > 1 ? $"{qty}x " : string.Empty;
+                    string ilvlTag = ilvl > 0 ? $" (iLvl {ilvl})" : string.Empty;
+                    string rarityTag = !string.IsNullOrEmpty(rarity) && !string.Equals(rarity, "None", StringComparison.OrdinalIgnoreCase)
+                        ? $"[{rarity}] "
+                        : string.Empty;
+                    string ruleTag = !string.IsNullOrEmpty(rule) ? $" *({rule})*" : string.Empty;
+                    lines.Add($"- **{qtyTag}{rarityTag}{name}**{ilvlTag} — +${FmtNum(credits)}{ruleTag}");
+                }
+                if (totalEntries > 10)
+                    lines.Add($"*...and {totalEntries - 10} more*");
+            }
+
+            var embed = MakeEmbed(
+                $"Auto-Sell — {count} {(count == 1 ? "Item" : "Items")} Sold",
+                Truncate(string.Join("\n", lines), 4000),
+                0x10B981);
+            await _discord.PostChannelMessageAsync(embed, ct: ct);
+        }
     }
 
     private static async Task CheckAlertsAsync(JsonElement state, CancellationToken ct)

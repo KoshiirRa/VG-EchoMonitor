@@ -1014,6 +1014,113 @@
     background: var(--bg-panel);
     border: 1px solid var(--border);
   }
+  .zk-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .zk-stat {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-top: 2px solid #c0392b;
+    padding: 10px 12px;
+  }
+  .zk-stat.waves { border-top-color: #d4a017; }
+  .zk-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+  .zk-stat-val { font-size: 20px; font-weight: 700; margin-top: 2px; font-family: var(--mono); color: var(--text-bright); }
+  .zk-stat-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .zk-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 900px) { .zk-grid { grid-template-columns: 1fr; } }
+  .zk-panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .zk-panel-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .zk-class-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .zk-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    color: var(--text);
+  }
+  .zk-pill:hover, .zk-pill.active { border-color: #e74c3c; background: rgba(231,76,60,0.14); color: #fff; }
+  .zk-pill-cnt { font-family: var(--mono); font-weight: 700; color: #e74c3c; }
+  .zk-wave-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 11px;
+  }
+  .zk-wave-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    background: rgba(212,160,23,0.18);
+    border: 1px solid rgba(212,160,23,0.45);
+    color: #f1c40f;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 10px;
+  }
+  .zk-rank-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-family: var(--mono);
+    border: 1px solid var(--border);
+    margin-left: 4px;
+  }
+  .zk-rank-Elite, .zk-rank-Champion, .zk-rank-Boss { color: #f39c12; border-color: rgba(243,156,18,0.5); background: rgba(243,156,18,0.12); }
+  .zk-rank-Veteran { color: #3498db; border-color: rgba(52,152,219,0.5); background: rgba(52,152,219,0.12); }
+  .zk-kill-row { cursor: pointer; }
+  .zk-kill-row:hover { background: rgba(231,76,60,0.08); }
+  .zk-killmail {
+    background: #0d1218;
+    border: 1px solid #c0392b;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .zk-killmail-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .zk-killmail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    font-size: 12px;
+  }
+  @media (max-width: 700px) { .zk-killmail-grid { grid-template-columns: 1fr; } }
+  .zk-km-kv { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .zk-km-k { color: var(--text-dim); }
+  .zk-km-v { color: var(--text-bright); font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -1236,6 +1343,9 @@
       <button class="tab-btn" data-tab="missions" type="button" role="tab">
         Mission Log <span id="count-missions" class="tab-count">0</span>
       </button>
+      <button class="tab-btn" data-tab="kills" type="button" role="tab">
+        Kill Log <span id="count-kills" class="tab-count">0</span>
+      </button>
       <button class="tab-btn" data-tab="timeline" type="button" role="tab">
         Session Timeline <span id="count-timeline" class="tab-count">0</span>
       </button>
@@ -1419,6 +1529,61 @@
       <div id="history-container"></div>
     </div>
 
+    <!-- Tab: Kill Log (zKillboard style) -->
+    <div id="pane-kills" class="tab-pane">
+      <div class="section-heading">
+        <span>Combat Killboard &amp; Wave Tracker</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="kills-filter-badge" class="mono neu"></span>
+          <button id="btn-clear-kills" class="btn" type="button">Clear Kill Log</button>
+        </div>
+      </div>
+
+      <div class="zk-stats-bar">
+        <div class="zk-stat">
+          <div class="zk-stat-label">Total Kills</div>
+          <div id="zk-total-kills" class="zk-stat-val">0</div>
+          <div id="zk-mission-kills" class="zk-stat-sub">Current POI/Mission: 0</div>
+        </div>
+        <div class="zk-stat waves">
+          <div class="zk-stat-label">Reinforcement Waves</div>
+          <div id="zk-total-waves" class="zk-stat-val">0</div>
+          <div id="zk-mission-waves" class="zk-stat-sub">Current POI/Mission: 0</div>
+        </div>
+        <div class="zk-stat">
+          <div class="zk-stat-label">Top Ship Class</div>
+          <div id="zk-top-class" class="zk-stat-val" style="font-size:15px">--</div>
+          <div id="zk-top-class-sub" class="zk-stat-sub">0 kills</div>
+        </div>
+        <div class="zk-stat">
+          <div class="zk-stat-label">Top Final Blow</div>
+          <div id="zk-top-killer" class="zk-stat-val" style="font-size:15px">--</div>
+          <div id="zk-top-killer-sub" class="zk-stat-sub">0 kills</div>
+        </div>
+      </div>
+
+      <div class="zk-grid">
+        <div class="zk-panel">
+          <div class="zk-panel-title">
+            <span>Kills by Ship Class (click to filter)</span>
+            <span id="zk-class-total" class="mono">0 classes</span>
+          </div>
+          <div id="zk-class-pills" class="zk-class-pills"></div>
+        </div>
+        <div class="zk-panel">
+          <div class="zk-panel-title">
+            <span>Reinforcement Wave Log</span>
+            <span id="zk-wave-context" class="mono"></span>
+          </div>
+          <div id="zk-wave-list"></div>
+        </div>
+      </div>
+
+      <div id="zk-killmail-detail" class="zk-killmail hidden"></div>
+
+      <div id="kills-table-container"></div>
+    </div>
+
     <!-- Tab 8: ECHO Enhanced -->
     <div id="pane-enhanced" class="tab-pane">
       <div id="enhanced-missing" class="empty-state hidden">
@@ -1426,6 +1591,15 @@
         Install <code>EchoEnhanced.dll</code> alongside <code>EchoMonitor.dll</code> in <code>BepInEx/plugins/</code> to enable Auto-Favorite Modules and future ECHO Enhanced automation.
       </div>
       <div id="enhanced-content" class="hidden">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px">
+          <button type="button" class="btn enhanced-subtab active" data-subtab="autofav" style="font-weight:600">Auto-Favorite <span id="subcount-autofav" class="mono muted" style="margin-left:4px">0/0</span></button>
+          <button type="button" class="btn enhanced-subtab" data-subtab="autosell" style="font-weight:600">Auto-Sell <span id="subcount-autosell" class="mono muted" style="margin-left:4px">0/0</span></button>
+          <button type="button" class="btn enhanced-subtab" data-subtab="autobuy" style="font-weight:600">Auto-Buy <span id="subcount-autobuy" class="mono muted" style="margin-left:4px">0/0</span></button>
+          <button type="button" class="btn enhanced-subtab" data-subtab="drones" style="font-weight:600">Drone Loadouts <span id="subcount-drones" class="mono muted" style="margin-left:4px">0</span></button>
+        </div>
+
+        <!-- Sub-tab: Auto-Favorite -->
+        <div id="enhanced-sub-autofav">
         <div class="section-heading">
           <span>Auto-Favorite Modules</span>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1469,8 +1643,186 @@
 
         <div id="enhanced-rules-list"></div>
 
-        <!-- Visual Rule Editor -->
-        <div id="enhanced-rule-editor" class="rule-form hidden">
+        <details style="margin:12px 0">
+          <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px">Advanced JSON Editor (Copy / Paste / Share Rules)</summary>
+          <div style="margin-top:8px">
+            <textarea id="enhanced-rules-editor" spellcheck="false" style="width:100%;min-height:200px;background:var(--bg-panel-alt);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:monospace;font-size:12px;line-height:1.45;resize:vertical"></textarea>
+            <div style="margin-top:6px;display:flex;gap:8px">
+              <button id="btn-enhanced-save-rules" class="btn" type="button">Save &amp; Reload Raw JSON</button>
+            </div>
+          </div>
+        </details>
+
+        <div class="section-heading" style="margin-top:16px">
+          <span>Recent Auto-Favorite Activity</span>
+        </div>
+        <div id="enhanced-events-container"></div>
+        </div>
+
+        <!-- Sub-tab: Auto-Sell -->
+        <div id="enhanced-sub-autosell" class="hidden">
+          <div class="section-heading">
+            <span>Auto-Sell Junk &amp; Equipment <span id="autosell-session-stats" class="mono muted" style="font-size:12px;margin-left:8px"></span></span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btn-autosell-scan" class="btn" type="button">Scan &amp; Sell Now</button>
+              <button id="btn-autosell-refresh" class="btn" type="button">Refresh</button>
+            </div>
+          </div>
+
+          <div class="filter-bar" style="gap:16px;flex-wrap:wrap;align-items:center">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input id="chk-autosell-enabled" type="checkbox"> <span>Auto-Sell Enabled</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Only sell items in the Armory">
+              <input id="chk-autosell-armory" type="checkbox"> <span>Armory Only</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input id="chk-autosell-dryrun" type="checkbox"> <span>Dry Run (Log Only)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input id="chk-autosell-scanload" type="checkbox"> <span>Scan on Save Load</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input id="chk-autosell-verbose" type="checkbox"> <span>Verbose Log</span>
+            </label>
+          </div>
+
+          <div class="section-heading">
+            <span>Auto-Sell Rules <span id="autosell-rules-path" class="mono muted" style="font-size:11px"></span></span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button id="btn-autosell-new-rule" class="btn" type="button">+ New Rule</button>
+              <select id="sel-autosell-preset" class="filter-select" aria-label="Add Auto-Sell preset">
+                <option value="">+ Add Preset...</option>
+                <option value="standard_junk">Standard Rarity Equipment</option>
+                <option value="enhanced_no_aspect">Enhanced (No Aspect) Equipment</option>
+                <option value="low_ilvl">Low iLvl (&lt; 70) Non-Legendary</option>
+                <option value="data_fragments">Data Fragments</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="autosell-rules-list"></div>
+          <div id="autosell-preview-box" class="preview-box hidden" style="margin-top:10px"></div>
+
+          <details style="margin:12px 0">
+            <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px">Auto-Sell JSON Editor (Edit / Paste / Share Rules)</summary>
+            <div style="margin-top:8px">
+              <textarea id="autosell-rules-editor" spellcheck="false" style="width:100%;min-height:180px;background:var(--bg-panel-alt);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:monospace;font-size:12px;line-height:1.45;resize:vertical"></textarea>
+              <div style="margin-top:6px;display:flex;gap:8px">
+                <button id="btn-autosell-save-rules" class="btn" type="button">Save &amp; Reload Auto-Sell JSON</button>
+              </div>
+            </div>
+          </details>
+
+          <div class="section-heading" style="margin-top:16px">
+            <span>Recent Auto-Sell Activity</span>
+          </div>
+          <div id="autosell-events-container"></div>
+        </div>
+
+        <!-- Sub-tab: Auto-Buy -->
+        <div id="enhanced-sub-autobuy" class="hidden">
+          <div class="section-heading">
+            <span>Auto-Buy Store Scanner <span id="autobuy-session-stats" class="mono muted" style="font-size:12px;margin-left:8px"></span></span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btn-autobuy-scan" class="btn" type="button">Scan Docked Store Now</button>
+              <button id="btn-autobuy-refresh" class="btn" type="button">Refresh</button>
+            </div>
+          </div>
+
+          <div class="filter-bar" style="gap:16px;flex-wrap:wrap;align-items:center">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input id="chk-autobuy-enabled" type="checkbox"> <span>Auto-Buy Enabled</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input id="chk-autobuy-dryrun" type="checkbox"> <span>Dry Run (Log Only)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input id="chk-autobuy-verbose" type="checkbox"> <span>Verbose Log</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px">
+              <span>Min Credits Reserve:</span>
+              <input id="num-autobuy-reserve" class="filter-input mono" type="number" min="0" step="1000" style="width:120px" value="0">
+            </label>
+          </div>
+
+          <div class="section-heading">
+            <span>Auto-Buy Rules <span id="autobuy-rules-path" class="mono muted" style="font-size:11px"></span></span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button id="btn-autobuy-new-rule" class="btn" type="button">+ New Rule</button>
+              <select id="sel-autobuy-preset" class="filter-select" aria-label="Add Auto-Buy preset">
+                <option value="">+ Add Preset...</option>
+                <option value="unknown_bp">All Unknown Blueprints</option>
+                <option value="officer_upgrades">Officer Upgrade Items (Usable)</option>
+                <option value="exotic_gear">Exotic+ Store Equipment</option>
+                <option value="legendary_gear">Legendary Store Equipment</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="autobuy-rules-list"></div>
+          <div id="autobuy-preview-box" class="preview-box hidden" style="margin-top:10px"></div>
+
+          <details style="margin:12px 0">
+            <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px">Auto-Buy JSON Editor (Edit / Paste / Share Rules)</summary>
+            <div style="margin-top:8px">
+              <textarea id="autobuy-rules-editor" spellcheck="false" style="width:100%;min-height:180px;background:var(--bg-panel-alt);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:monospace;font-size:12px;line-height:1.45;resize:vertical"></textarea>
+              <div style="margin-top:6px;display:flex;gap:8px">
+                <button id="btn-autobuy-save-rules" class="btn" type="button">Save &amp; Reload Auto-Buy JSON</button>
+              </div>
+            </div>
+          </details>
+
+          <div class="section-heading" style="margin-top:16px">
+            <span>Recent Auto-Buy Activity</span>
+          </div>
+          <div id="autobuy-events-container"></div>
+        </div>
+
+        <!-- Sub-tab: Drone Loadouts -->
+        <div id="enhanced-sub-drones" class="hidden">
+          <div class="section-heading">
+            <span>Fleet Drone Loadouts <span id="drones-status-badge" class="mono muted" style="font-size:11px;margin-left:8px"></span></span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btn-drones-refresh" class="btn" type="button">Refresh</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:14px">
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="chk-drones-enabled" type="checkbox"> <span>Drone Loadouts Enabled</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="chk-drones-autoswap" type="checkbox"> <span>ECHO Auto-Swap</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="chk-drones-wrecks" type="checkbox"> <span>Swap to Salvage for Wrecks</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="chk-drones-hold-mission" type="checkbox"> <span>Hold Combat Mission Turn-in for Salvage</span>
+              </label>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+              <label style="font-size:12px">Combat: <input id="inp-drones-combat" type="text" class="filter-select" style="width:110px"></label>
+              <label style="font-size:12px">Salvage: <input id="inp-drones-salvage" type="text" class="filter-select" style="width:110px"></label>
+              <label style="font-size:12px">Mining: <input id="inp-drones-mining" type="text" class="filter-select" style="width:110px"></label>
+              <button id="btn-drones-save-config" class="btn" type="button">Save ECHO Settings</button>
+            </div>
+          </div>
+
+          <div class="section-heading">
+            <span>Saved Fleet Presets</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <input id="inp-drones-capture-name" type="text" class="filter-select" placeholder="Preset name (e.g. Combat)" value="Combat" style="width:170px">
+              <button id="btn-drones-capture" class="btn" type="button">Capture Current Fleet</button>
+            </div>
+          </div>
+          <div id="drones-presets-container"></div>
+        </div>
+
+        <!-- Shared Visual Rule Editor (Auto-Favorite / Auto-Sell / Auto-Buy) -->
+        <div id="enhanced-rule-editor" class="rule-form hidden" style="margin-top:16px">
           <div class="section-heading" style="margin-top:0">
             <span id="rule-editor-title">Edit Rule</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1525,6 +1877,21 @@
             </div>
           </div>
 
+          <div id="rf-autobuy-fields" class="rule-form-grid hidden" style="margin-bottom:10px">
+            <div class="rule-field">
+              <label for="rf-max-price">Max Unit Price (credits, blank = no cap)</label>
+              <input id="rf-max-price" class="filter-input mono" type="number" min="0" step="1000" style="width:100%" placeholder="No cap">
+            </div>
+            <div class="rule-field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:6px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+                <input id="rf-only-unknown-bp" type="checkbox" checked> <span>Only Unknown Blueprints</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+                <input id="rf-buy-full-stack" type="checkbox"> <span>Buy Full Stack</span>
+              </label>
+            </div>
+          </div>
+
           <div class="rule-field" style="margin-bottom:10px">
             <label>Categories (leave all unselected to match all equipment)</label>
             <div id="rf-categories" class="pill-toggle-group">
@@ -1533,6 +1900,9 @@
               <button type="button" class="pill-toggle" data-cat="Booster">Booster</button>
               <button type="button" class="pill-toggle" data-cat="Drone">Drone</button>
               <button type="button" class="pill-toggle" data-cat="DefensiveTurret">DefensiveTurret</button>
+              <button type="button" class="pill-toggle" data-cat="Blueprint">Blueprint</button>
+              <button type="button" class="pill-toggle" data-cat="Usable">Usable</button>
+              <button type="button" class="pill-toggle" data-cat="Data">Data</button>
             </div>
           </div>
 
@@ -1567,21 +1937,6 @@
 
           <div id="rf-preview-box" class="preview-box hidden"></div>
         </div>
-
-        <details style="margin:12px 0">
-          <summary style="cursor:pointer;color:var(--text-secondary);font-size:12px">Advanced JSON Editor (Copy / Paste / Share Rules)</summary>
-          <div style="margin-top:8px">
-            <textarea id="enhanced-rules-editor" spellcheck="false" style="width:100%;min-height:200px;background:var(--bg-panel-alt);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:monospace;font-size:12px;line-height:1.45;resize:vertical"></textarea>
-            <div style="margin-top:6px;display:flex;gap:8px">
-              <button id="btn-enhanced-save-rules" class="btn" type="button">Save &amp; Reload Raw JSON</button>
-            </div>
-          </div>
-        </details>
-
-        <div class="section-heading" style="margin-top:16px">
-          <span>Recent Auto-Favorite Activity</span>
-        </div>
-        <div id="enhanced-events-container"></div>
       </div>
     </div>
   </section>
@@ -2891,10 +3246,15 @@
 
       const sysSec = [m.systemName, m.sectorName].filter(Boolean).join(" · ");
       let locHtml = '<span class="neu">--</span>';
-      if (m.stationName && sysSec) {
-        locHtml = "<strong>" + esc(m.stationName) + '</strong><div class="neu" style="font-size:11px">' + esc(sysSec) + "</div>";
-      } else if (m.stationName) {
-        locHtml = "<strong>" + esc(m.stationName) + "</strong>";
+      const primaryLoc = m.missionPoiName || m.stationName;
+      const subParts = [];
+      if (m.missionPoiName && m.stationName && m.missionPoiName !== m.stationName) subParts.push(m.stationName);
+      if (sysSec) subParts.push(sysSec);
+      const subLoc = subParts.join(" · ");
+      if (primaryLoc && subLoc) {
+        locHtml = "<strong>" + esc(primaryLoc) + '</strong><div class="neu" style="font-size:11px">' + esc(subLoc) + "</div>";
+      } else if (primaryLoc) {
+        locHtml = "<strong>" + esc(primaryLoc) + "</strong>";
       } else if (sysSec) {
         locHtml = '<span class="neu">' + esc(sysSec) + "</span>";
       }
@@ -3224,22 +3584,58 @@
       $("enhanced-content").classList.remove("hidden");
 
       const af = data.autoFavorite || {};
-      $("count-enhanced").textContent = (af.enabledRuleCount || 0) + "/" + (af.ruleCount || 0);
+      const asell = data.autoSell || {};
+      const abuy = data.autoBuy || {};
+      const totalEnabled = (af.enabledRuleCount || 0) + (asell.enabledRuleCount || 0) + (abuy.enabledRuleCount || 0);
+      const totalRules = (af.ruleCount || 0) + (asell.ruleCount || 0) + (abuy.ruleCount || 0);
+      $("count-enhanced").textContent = totalEnabled + "/" + totalRules;
+      $("subcount-autofav").textContent = (af.enabledRuleCount || 0) + "/" + (af.ruleCount || 0);
+      $("subcount-autosell").textContent = (asell.enabledRuleCount || 0) + "/" + (asell.ruleCount || 0);
+      $("subcount-autobuy").textContent = (abuy.enabledRuleCount || 0) + "/" + (abuy.ruleCount || 0);
+
       $("chk-autofav-enabled").checked = !!af.enabled;
       $("chk-autofav-armory").checked = af.armoryOnly !== false;
       $("chk-autofav-dryrun").checked = !!af.dryRun;
       $("chk-autofav-scanload").checked = !!af.scanOnLoad;
       $("chk-autofav-verbose").checked = !!af.verboseLog;
       $("enhanced-rules-path").textContent = af.rulesPath || "";
-
       renderEnhancedEvents(af.recentEvents || []);
+
+      // Auto-Sell status
+      $("chk-autosell-enabled").checked = !!asell.enabled;
+      $("chk-autosell-armory").checked = asell.armoryOnly !== false;
+      $("chk-autosell-dryrun").checked = !!asell.dryRun;
+      $("chk-autosell-scanload").checked = !!asell.scanOnLoad;
+      $("chk-autosell-verbose").checked = !!asell.verboseLog;
+      $("autosell-rules-path").textContent = asell.rulesPath || "";
+      $("autosell-session-stats").textContent = "Session: " + (asell.sessionSoldCount || 0) + " sold · +" + Math.round(asell.sessionCreditsEarned || 0).toLocaleString() + " cr";
+      renderAutoSellEvents(asell.recentEvents || []);
+
+      // Auto-Buy status
+      $("chk-autobuy-enabled").checked = !!abuy.enabled;
+      $("chk-autobuy-dryrun").checked = !!abuy.dryRun;
+      $("chk-autobuy-verbose").checked = !!abuy.verboseLog;
+      if (document.activeElement !== $("num-autobuy-reserve")) {
+        $("num-autobuy-reserve").value = String(Math.round(abuy.minCreditsReserve || 0));
+      }
+      $("autobuy-rules-path").textContent = abuy.rulesPath || "";
+      $("autobuy-session-stats").textContent = "Session: " + (abuy.sessionBoughtCount || 0) + " bought · -" + Math.round(abuy.sessionCreditsSpent || 0).toLocaleString() + " cr";
+      renderAutoBuyEvents(abuy.recentEvents || []);
+
+      if (data.droneLoadouts && Array.isArray(data.droneLoadouts.presets)) {
+        $("subcount-drones").textContent = String(data.droneLoadouts.presets.length);
+      }
 
       if (enhancedCatalog.substats.length === 0) {
         fetchEnhancedCatalog();
       }
 
       if (loadRules || !enhancedRulesLoaded) {
-        const rResp = await fetch("/api/enhanced/autofav/rules", { cache: "no-store" });
+        const [rResp, sResp, bResp] = await Promise.all([
+          fetch("/api/enhanced/autofav/rules", { cache: "no-store" }),
+          fetch("/api/enhanced/autosell/rules", { cache: "no-store" }),
+          fetch("/api/enhanced/autobuy/rules", { cache: "no-store" })
+        ]);
         if (rResp.ok) {
           const raw = await rResp.text();
           $("enhanced-rules-editor").value = raw;
@@ -3250,8 +3646,30 @@
             enhancedRules = [];
           }
           renderRuleCards();
-          enhancedRulesLoaded = true;
         }
+        if (sResp.ok) {
+          const raw = await sResp.text();
+          $("autosell-rules-editor").value = raw;
+          try {
+            const parsed = JSON.parse(raw);
+            autoSellRules = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.rules) ? parsed.rules : []);
+          } catch (_) {
+            autoSellRules = [];
+          }
+          renderAutoSellRules();
+        }
+        if (bResp.ok) {
+          const raw = await bResp.text();
+          $("autobuy-rules-editor").value = raw;
+          try {
+            const parsed = JSON.parse(raw);
+            autoBuyRules = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.rules) ? parsed.rules : []);
+          } catch (_) {
+            autoBuyRules = [];
+          }
+          renderAutoBuyRules();
+        }
+        enhancedRulesLoaded = true;
       }
     } catch (_) {
       $("count-enhanced").textContent = "OFF";
@@ -3360,10 +3778,25 @@
     }
   }
 
-  function openRuleEditor(idx, prefillRule) {
+  let editingRuleTarget = "autofav";
+
+  function getRuleListForTarget(target) {
+    if (target === "autosell") return autoSellRules;
+    if (target === "autobuy") return autoBuyRules;
+    return enhancedRules;
+  }
+
+  function openRuleEditor(idx, prefillRule, target) {
+    editingRuleTarget = target || "autofav";
     editingRuleIdx = idx;
-    const rule = prefillRule || (idx >= 0 ? enhancedRules[idx] : { name: "New Rule", enabled: true });
-    $("rule-editor-title").textContent = idx >= 0 ? "Edit Rule" : "New Rule";
+    const list = getRuleListForTarget(editingRuleTarget);
+    const labelMap = { autofav: "Auto-Favorite", autosell: "Auto-Sell", autobuy: "Auto-Buy" };
+    const rule = prefillRule || (idx >= 0 ? list[idx] : { name: "New " + labelMap[editingRuleTarget] + " Rule", enabled: true });
+    $("rule-editor-title").textContent = (idx >= 0 ? "Edit " : "New ") + labelMap[editingRuleTarget] + " Rule";
+    $("rf-autobuy-fields").classList.toggle("hidden", editingRuleTarget !== "autobuy");
+    $("rf-max-price").value = rule.maxPrice != null ? String(rule.maxPrice) : "";
+    $("rf-only-unknown-bp").checked = rule.onlyUnknownBlueprints !== false;
+    $("rf-buy-full-stack").checked = rule.buyFullStack === true;
     $("rf-name").value = rule.name || "";
     $("rf-min-rarity").value = rule.minRarity || "";
     $("rf-max-rarity").value = rule.maxRarity || "";
@@ -3400,10 +3833,17 @@
   }
 
   function buildRuleFromForm() {
+    const list = getRuleListForTarget(editingRuleTarget);
     const rule = {
       name: ($("rf-name").value || "").trim() || "Unnamed Rule",
-      enabled: editingRuleIdx >= 0 ? (enhancedRules[editingRuleIdx].enabled !== false) : true
+      enabled: editingRuleIdx >= 0 && list[editingRuleIdx] ? (list[editingRuleIdx].enabled !== false) : true
     };
+    if (editingRuleTarget === "autobuy") {
+      rule.onlyUnknownBlueprints = $("rf-only-unknown-bp").checked;
+      if ($("rf-buy-full-stack").checked) rule.buyFullStack = true;
+      const mp = $("rf-max-price").value.trim();
+      if (mp !== "") rule.maxPrice = Math.max(0, Number(mp));
+    }
     const cats = [];
     $("rf-categories").querySelectorAll(".pill-toggle.active").forEach((b) => cats.push(b.getAttribute("data-cat")));
     if (cats.length) rule.categories = cats;
@@ -3515,40 +3955,73 @@
     btn.addEventListener("click", () => btn.classList.toggle("active"));
   });
   $("rf-substat-search").addEventListener("input", renderSubstatPicker);
-  $("btn-enhanced-new-rule").addEventListener("click", () => openRuleEditor(-1));
+  $("btn-enhanced-new-rule").addEventListener("click", () => openRuleEditor(-1, null, "autofav"));
+  $("btn-autosell-new-rule").addEventListener("click", () => openRuleEditor(-1, null, "autosell"));
+  $("btn-autobuy-new-rule").addEventListener("click", () => openRuleEditor(-1, null, "autobuy"));
   $("btn-rule-cancel").addEventListener("click", closeRuleEditor);
   $("btn-rule-save").addEventListener("click", () => {
     const rule = buildRuleFromForm();
+    const target = editingRuleTarget;
+    const list = getRuleListForTarget(target);
     if (editingRuleIdx >= 0) {
-      enhancedRules[editingRuleIdx] = rule;
+      list[editingRuleIdx] = rule;
     } else {
-      enhancedRules.push(rule);
+      list.push(rule);
     }
     closeRuleEditor();
-    persistEnhancedRules("Saved rule '" + rule.name + "'.");
+    if (target === "autosell") {
+      persistAutoSellRules("Saved Auto-Sell rule '" + rule.name + "'.");
+    } else if (target === "autobuy") {
+      persistAutoBuyRules("Saved Auto-Buy rule '" + rule.name + "'.");
+    } else {
+      persistEnhancedRules("Saved rule '" + rule.name + "'.");
+    }
   });
 
   $("btn-rule-preview").addEventListener("click", async () => {
     const box = $("rf-preview-box");
     box.classList.remove("hidden");
-    box.innerHTML = '<span class="muted">Testing rule against player inventories...</span>';
+    const target = editingRuleTarget;
+    box.innerHTML = '<span class="muted">Testing rule...</span>';
     try {
       const rule = buildRuleFromForm();
-      const resp = await fetch("/api/enhanced/autofav/preview", {
+      const endpoint = target === "autosell" ? "/api/enhanced/autosell/preview"
+        : (target === "autobuy" ? "/api/enhanced/autobuy/preview" : "/api/enhanced/autofav/preview");
+      const payload = target === "autofav" ? { rule, includeFavourited: true } : { rule };
+      const resp = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rule, includeFavourited: true })
+        body: JSON.stringify(payload)
       });
       const data = await resp.json();
       if (!data.ok) {
         box.innerHTML = '<span class="neg">Preview error: ' + esc(data.error || "Unknown") + '</span>';
         return;
       }
+      if (target === "autobuy" && !data.dockedWithStore) {
+        box.innerHTML = '<span class="muted">Not currently docked at a station with a store.</span>';
+        return;
+      }
       const matches = data.matches || [];
       let html = '<div style="margin-bottom:6px;font-size:12px"><strong>' + matches.length + ' match(es)</strong> across ' +
-        data.itemsScanned + ' items (' + data.inventoriesScanned + ' inventories):</div>';
+        (data.itemsScanned || 0) + ' items' +
+        (target === "autosell" ? (' (est. +' + Math.round(data.totalCredits || 0).toLocaleString() + ' cr)') : '') +
+        (target === "autobuy" ? (' at ' + esc(data.stationName || "Station") + ' (est. -' + Math.round(data.totalCost || 0).toLocaleString() + ' cr)') : '') +
+        ':</div>';
       if (!matches.length) {
-        html += '<div class="muted" style="font-size:12px">No items currently in your inventories match this rule.</div>';
+        html += '<div class="muted" style="font-size:12px">No items currently match this rule.</div>';
+      } else if (target === "autosell") {
+        html += '<table class="data-table"><thead><tr><th>Item</th><th>iLvl</th><th>Category</th><th>Qty</th><th>Est. Credits</th></tr></thead><tbody>';
+        for (const m of matches.slice(0, 25)) {
+          html += '<tr><td class="rarity-' + esc(m.rarity || "Standard") + '">' + esc(m.displayName) + '</td><td class="mono">' + esc(m.itemLevel) + '</td><td>' + esc(m.category) + '</td><td class="mono">' + esc(m.count ?? 1) + '</td><td class="mono pos">+' + Math.round(m.credits || 0).toLocaleString() + '</td></tr>';
+        }
+        html += '</tbody></table>';
+      } else if (target === "autobuy") {
+        html += '<table class="data-table"><thead><tr><th>Item</th><th>iLvl</th><th>Category</th><th>Cost</th></tr></thead><tbody>';
+        for (const m of matches.slice(0, 25)) {
+          html += '<tr><td class="rarity-' + esc(m.rarity || "Standard") + '">' + esc(m.displayName) + '</td><td class="mono">' + esc(m.itemLevel) + '</td><td>' + esc(m.category) + '</td><td class="mono neg">-' + Math.round(m.cost || 0).toLocaleString() + '</td></tr>';
+        }
+        html += '</tbody></table>';
       } else {
         html += '<table class="data-table"><thead><tr><th>Item</th><th>iLvl</th><th>Category</th><th>Substats / Aspects</th><th>Status</th></tr></thead><tbody>';
         for (const m of matches.slice(0, 25)) {
@@ -3559,9 +4032,9 @@
             '</td><td>' + esc(m.category) + '</td><td style="font-size:11px">' + esc(details) + '</td><td>' + status + '</td></tr>';
         }
         html += '</tbody></table>';
-        if (matches.length > 25) {
-          html += '<div class="muted" style="font-size:11px;margin-top:4px">Showing first 25 of ' + matches.length + ' matches.</div>';
-        }
+      }
+      if (matches.length > 25) {
+        html += '<div class="muted" style="font-size:11px;margin-top:4px">Showing first 25 of ' + matches.length + ' matches.</div>';
       }
       box.innerHTML = html;
     } catch (e) {
@@ -3660,12 +4133,695 @@
     }
   });
 
+  // ------------------------------------------------------------------
+  // ECHO Enhanced Sub-Tabs, Auto-Sell & Auto-Buy
+  // ------------------------------------------------------------------
+  let autoSellRules = [];
+  let autoBuyRules = [];
+
+  const AUTOSELL_PRESETS = {
+    standard_junk: { name: "Sell Standard Equipment", enabled: true, maxRarity: "Standard" },
+    enhanced_no_aspect: { name: "Sell Enhanced (No Aspect)", enabled: true, maxRarity: "Enhanced", hasAspect: false },
+    low_ilvl: { name: "Sell Low iLvl (< 70) Non-Legendary", enabled: true, maxRarity: "Exotic", maxItemLevel: 69 },
+    data_fragments: { name: "Sell Data Fragments", enabled: true, categories: ["Data"] }
+  };
+
+  const AUTOBUY_PRESETS = {
+    unknown_bp: { name: "Buy Unknown Blueprints", enabled: true, categories: ["Blueprint"], onlyUnknownBlueprints: true },
+    officer_upgrades: { name: "Buy Officer Upgrade Items", enabled: true, categories: ["Usable"], nameContains: ["Neural Patch", "Synaptic Implant", "Cortex Augment", "Neuro Core"], maxPrice: 10000000, buyFullStack: true },
+    exotic_gear: { name: "Buy Exotic+ Store Equipment", enabled: true, minRarity: "Exotic", categories: ["Turret", "Module", "Booster", "Drone", "DefensiveTurret"] },
+    legendary_gear: { name: "Buy Legendary Store Equipment", enabled: true, minRarity: "Legendary" }
+  };
+
+  document.querySelectorAll(".enhanced-subtab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.getAttribute("data-subtab");
+      document.querySelectorAll(".enhanced-subtab").forEach((b) => b.classList.toggle("active", b === btn));
+      $("enhanced-sub-autofav").classList.toggle("hidden", target !== "autofav");
+      $("enhanced-sub-autosell").classList.toggle("hidden", target !== "autosell");
+      $("enhanced-sub-autobuy").classList.toggle("hidden", target !== "autobuy");
+      $("enhanced-sub-drones").classList.toggle("hidden", target !== "drones");
+      if (target === "drones") {
+        loadDroneLoadoutsTab();
+      }
+    });
+  });
+
+  async function loadDroneLoadoutsTab() {
+    try {
+      const [stResp, storeResp] = await Promise.all([
+        fetch("/api/enhanced/status", { cache: "no-store" }),
+        fetch("/api/enhanced/drones/store", { cache: "no-store" })
+      ]);
+      if (!stResp.ok || !storeResp.ok) return;
+      const st = await stResp.json();
+      const store = await storeResp.json();
+      const dl = st.droneLoadouts || {};
+      const b = store.echoBindings || dl.echoBindings || {};
+      const presets = store.presets || {};
+      const presetNames = Object.keys(presets).sort((a, c) => a.localeCompare(c));
+
+      $("subcount-drones").textContent = String(presetNames.length);
+      $("drones-status-badge").textContent =
+        (dl.canSwapNow ? ("Ready (" + (dl.swapStatus || "OK") + ")") : ("Locked: " + (dl.swapStatus || "Skill required")))
+        + (dl.lastAppliedPreset ? (" · Last: " + dl.lastAppliedPreset + (dl.lastSwapReason ? " (" + dl.lastSwapReason + ")" : "")) : "");
+
+      $("chk-drones-enabled").checked = dl.enabled !== false;
+      $("chk-drones-autoswap").checked = !!b.autoSwapEnabled;
+      $("chk-drones-wrecks").checked = !!b.swapToSalvageForWrecks;
+      $("chk-drones-hold-mission").checked = b.holdForPostMissionSalvage !== false;
+      if (document.activeElement !== $("inp-drones-combat")) $("inp-drones-combat").value = b.combatPreset || "";
+      if (document.activeElement !== $("inp-drones-salvage")) $("inp-drones-salvage").value = b.salvagePreset || "";
+      if (document.activeElement !== $("inp-drones-mining")) $("inp-drones-mining").value = b.miningPreset || "";
+
+      const container = $("drones-presets-container");
+      if (presetNames.length === 0) {
+        container.innerHTML = '<div class="empty-state">No drone presets saved yet. Configure your fleet in-game and click Capture Current Fleet above (or press Alt+D in-game).</div>';
+        return;
+      }
+
+      container.innerHTML = presetNames.map((name) => {
+        const p = presets[name] || {};
+        const shipEntries = Object.values(p.ships || {});
+        const shipSummary = shipEntries.map((s) => esc(s.shipName || s.shipGuid) + " (" + ((s.slots || []).filter(Boolean).length) + ")").join(", ");
+        return '<div class="card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
+          + '<div><div style="font-weight:600">' + esc(name) + ' <span class="mono muted" style="font-size:11px">(' + shipEntries.length + ' ship' + (shipEntries.length === 1 ? '' : 's') + ')</span></div>'
+          + '<div class="muted" style="font-size:11px;margin-top:2px">' + (shipSummary || 'No ships') + '</div></div>'
+          + '<div style="display:flex;gap:8px">'
+          + '<button type="button" class="btn btn-drone-apply" data-preset="' + esc(name) + '"' + (dl.canSwapNow ? '' : ' disabled') + '>Apply to Fleet</button>'
+          + '<button type="button" class="btn btn-drone-delete" data-preset="' + esc(name) + '">Delete</button>'
+          + '</div></div>';
+      }).join("");
+
+      container.querySelectorAll(".btn-drone-apply").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const preset = btn.getAttribute("data-preset");
+          const r = await fetch("/api/enhanced/drones/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset }) });
+          const res = await r.json();
+          showToast(res.message || (res.ok ? ("Applied " + preset) : (res.error || "Failed")), !res.ok);
+          loadDroneLoadoutsTab();
+        });
+      });
+
+      container.querySelectorAll(".btn-drone-delete").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const preset = btn.getAttribute("data-preset");
+          const r = await fetch("/api/enhanced/drones/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset }) });
+          const res = await r.json();
+          showToast(res.ok ? ("Deleted '" + preset + "'.") : "Delete failed.", !res.ok);
+          loadDroneLoadoutsTab();
+        });
+      });
+    } catch (e) {
+      console.error("Failed to load drone loadouts:", e);
+    }
+  }
+
+  $("btn-drones-refresh")?.addEventListener("click", () => loadDroneLoadoutsTab());
+  $("btn-drones-capture")?.addEventListener("click", async () => {
+    const preset = ($("inp-drones-capture-name").value || "").trim();
+    if (!preset) { showToast("Enter a preset name first.", true); return; }
+    const r = await fetch("/api/enhanced/drones/capture", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset }) });
+    const res = await r.json();
+    showToast(res.message || (res.ok ? ("Captured " + preset) : (res.error || "Failed")), !res.ok);
+    loadDroneLoadoutsTab();
+  });
+  $("btn-drones-save-config")?.addEventListener("click", async () => {
+    const payload = {
+      enabled: $("chk-drones-enabled").checked,
+      autoSwapEnabled: $("chk-drones-autoswap").checked,
+      swapToSalvageForWrecks: $("chk-drones-wrecks").checked,
+      holdForPostMissionSalvage: $("chk-drones-hold-mission").checked,
+      combatPreset: ($("inp-drones-combat").value || "").trim(),
+      salvagePreset: ($("inp-drones-salvage").value || "").trim(),
+      miningPreset: ($("inp-drones-mining").value || "").trim()
+    };
+    const r = await fetch("/api/enhanced/drones/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const res = await r.json();
+    showToast(res.ok ? "Saved ECHO Drone Loadout settings." : (res.error || "Save failed."), !res.ok);
+    loadDroneLoadoutsTab();
+  });
+
+  function summarizeGenericRule(r) {
+    const pills = [];
+    if (r.minRarity || r.maxRarity) pills.push("Rarity: " + (r.minRarity || "Any") + " – " + (r.maxRarity || "Any"));
+    if (r.minItemLevel != null || r.maxItemLevel != null) pills.push("iLvl: " + (r.minItemLevel ?? "0") + " – " + (r.maxItemLevel ?? "∞"));
+    if (r.hasAspect === true) pills.push("Must Have Aspect");
+    if (r.hasAspect === false) pills.push("No Aspect");
+    if (Array.isArray(r.categories) && r.categories.length) pills.push("Cat: " + r.categories.join(", "));
+    if (Array.isArray(r.nameContains) && r.nameContains.length) pills.push("Name: " + r.nameContains.join(", "));
+    if (r.onlyUnknownBlueprints === true) pills.push("Unknown Blueprints Only");
+    if (r.buyFullStack === true) pills.push("Buy Full Stack");
+    if (r.maxPrice != null) pills.push("Max Price: " + Number(r.maxPrice).toLocaleString() + " cr");
+    return pills.length ? pills.map((p) => '<span class="pill">' + esc(p) + '</span>').join("") : '<span class="muted" style="font-size:11px">Matches all items</span>';
+  }
+
+  function renderAutoSellRules() {
+    const el = $("autosell-rules-list");
+    if (!autoSellRules.length) {
+      el.innerHTML = '<div class="empty-state">No Auto-Sell rules yet. Pick a preset above or edit the JSON below.</div>';
+      return;
+    }
+    el.innerHTML = autoSellRules.map((r, idx) =>
+      '<div class="rule-card' + (r.enabled === false ? ' disabled' : '') + '">' +
+        '<div class="rule-card-hdr">' +
+          '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">' +
+            '<input type="checkbox" class="chk-asell-toggle" data-idx="' + idx + '"' + (r.enabled !== false ? ' checked' : '') + '> ' +
+            esc(r.name || ("Rule #" + (idx + 1))) +
+          '</label>' +
+          '<div style="display:flex;gap:6px">' +
+            '<button type="button" class="btn btn-asell-edit" data-idx="' + idx + '">Edit</button>' +
+            '<button type="button" class="btn btn-asell-test" data-idx="' + idx + '">Test</button>' +
+            '<button type="button" class="btn btn-danger btn-asell-del" data-idx="' + idx + '">Delete</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="rule-pills">' + summarizeGenericRule(r) + '</div>' +
+      '</div>'
+    ).join("");
+
+    el.querySelectorAll(".chk-asell-toggle").forEach((chk) => {
+      chk.addEventListener("change", () => {
+        autoSellRules[Number(chk.getAttribute("data-idx"))].enabled = chk.checked;
+        persistAutoSellRules("Updated Auto-Sell rule.");
+      });
+    });
+    el.querySelectorAll(".btn-asell-edit").forEach((btn) => {
+      btn.addEventListener("click", () => openRuleEditor(Number(btn.getAttribute("data-idx")), null, "autosell"));
+    });
+    el.querySelectorAll(".btn-asell-del").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        autoSellRules.splice(Number(btn.getAttribute("data-idx")), 1);
+        persistAutoSellRules("Deleted Auto-Sell rule.");
+      });
+    });
+    el.querySelectorAll(".btn-asell-test").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const rule = autoSellRules[Number(btn.getAttribute("data-idx"))];
+        const box = $("autosell-preview-box");
+        box.classList.remove("hidden");
+        box.innerHTML = '<span class="muted">Testing rule against inventories...</span>';
+        try {
+          const resp = await fetch("/api/enhanced/autosell/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rule })
+          });
+          const data = await resp.json();
+          if (!data.ok) {
+            box.innerHTML = '<span class="neg">Preview failed: ' + esc(data.error || "Unknown error") + '</span>';
+            return;
+          }
+          const matches = data.matches || [];
+          let html = '<div style="margin-bottom:6px"><strong>' + esc(rule.name || "Rule") + '</strong> matched <strong>' + matches.length + '</strong> item(s) across ' + (data.itemsScanned || 0) + ' scanned (est. +' + Math.round(data.totalCredits || 0).toLocaleString() + ' cr).</div>';
+          if (matches.length) {
+            html += '<table class="data-table"><thead><tr><th>Item</th><th>iLvl</th><th>Category</th><th>Count</th><th>Est. Credits</th></tr></thead><tbody>';
+            for (const m of matches.slice(0, 25)) {
+              html += '<tr><td class="rarity-' + esc(m.rarity || "Standard") + '">' + esc(m.displayName) + '</td><td class="mono">' + esc(m.itemLevel) + '</td><td>' + esc(m.category) + '</td><td class="mono">' + esc(m.count ?? 1) + '</td><td class="mono pos">+' + Math.round(m.credits || 0).toLocaleString() + '</td></tr>';
+            }
+            html += '</tbody></table>';
+          }
+          box.innerHTML = html;
+        } catch (e) {
+          box.innerHTML = '<span class="neg">Preview error: ' + esc(e.message) + '</span>';
+        }
+      });
+    });
+  }
+
+  async function persistAutoSellRules(toastMsg) {
+    const raw = JSON.stringify({ rules: autoSellRules }, null, 2);
+    $("autosell-rules-editor").value = raw;
+    renderAutoSellRules();
+    try {
+      const resp = await fetch("/api/enhanced/autosell/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: raw
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        showToast(toastMsg || ("Saved " + data.ruleCount + " Auto-Sell rule(s)."), false);
+        fetchEnhancedStatus(false);
+      } else {
+        showToast("Auto-Sell rule save failed: " + (data.error || "Unknown error"), true);
+      }
+    } catch (e) {
+      showToast("Error saving Auto-Sell rules: " + e.message, true);
+    }
+  }
+
+  function renderAutoSellEvents(events) {
+    const el = $("autosell-events-container");
+    if (!events || !events.length) {
+      el.innerHTML = '<div class="empty-state">No Auto-Sell activity recorded this session yet.</div>';
+      return;
+    }
+    let html = '<table class="data-table"><thead><tr><th>Time</th><th>Item</th><th>iLvl</th><th>Category</th><th>Rule</th><th>Qty</th><th>Credits</th><th>Action</th></tr></thead><tbody>';
+    for (const ev of events) {
+      const badge = ev.dryRun ? '<span class="muted">Dry Run</span>' : '<span class="pos">Sold</span>';
+      html += '<tr><td class="mono muted">' + esc(ev.timestamp || "") + '</td><td class="rarity-' + esc(ev.rarity || "Standard") + '">' + esc(ev.displayName || "") + '</td><td class="mono">' + esc(ev.itemLevel ?? "") + '</td><td>' + esc(ev.category || "") + '</td><td>' + esc(ev.ruleName || "") + '</td><td class="mono">' + esc(ev.count ?? 1) + '</td><td class="mono pos">+' + Math.round(ev.credits || 0).toLocaleString() + '</td><td>' + badge + '</td></tr>';
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  }
+
+  async function saveAutoSellConfig() {
+    try {
+      const payload = {
+        enabled: $("chk-autosell-enabled").checked,
+        armoryOnly: $("chk-autosell-armory").checked,
+        dryRun: $("chk-autosell-dryrun").checked,
+        scanOnLoad: $("chk-autosell-scanload").checked,
+        verboseLog: $("chk-autosell-verbose").checked
+      };
+      const resp = await fetch("/api/enhanced/autosell/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      showToast(data.ok ? "Auto-Sell settings updated." : ("Auto-Sell config error: " + (data.error || "Unknown")), !data.ok);
+    } catch (e) {
+      showToast("Error updating Auto-Sell settings: " + e.message, true);
+    }
+  }
+
+  ["chk-autosell-enabled", "chk-autosell-armory", "chk-autosell-dryrun", "chk-autosell-scanload", "chk-autosell-verbose"].forEach((id) => {
+    $(id).addEventListener("change", saveAutoSellConfig);
+  });
+
+  $("sel-autosell-preset").addEventListener("change", () => {
+    const key = $("sel-autosell-preset").value;
+    $("sel-autosell-preset").value = "";
+    if (!key || !AUTOSELL_PRESETS[key]) return;
+    autoSellRules.push(JSON.parse(JSON.stringify(AUTOSELL_PRESETS[key])));
+    persistAutoSellRules("Added Auto-Sell preset.");
+  });
+
+  $("btn-autosell-save-rules").addEventListener("click", async () => {
+    try {
+      const parsed = JSON.parse($("autosell-rules-editor").value);
+      autoSellRules = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.rules) ? parsed.rules : []);
+      await persistAutoSellRules("Saved & reloaded " + autoSellRules.length + " Auto-Sell rule(s).");
+    } catch (e) {
+      showToast("Invalid Auto-Sell JSON: " + e.message, true);
+    }
+  });
+
+  $("btn-autosell-refresh").addEventListener("click", () => fetchEnhancedStatus(true));
+
+  $("btn-autosell-scan").addEventListener("click", async () => {
+    try {
+      const resp = await fetch("/api/enhanced/autosell/scan", { method: "POST" });
+      const data = await resp.json();
+      if (data.ok) {
+        const mode = data.dryRun ? " (Dry Run)" : "";
+        showToast("Auto-Sell scan: " + data.sold + " sold (+" + Math.round(data.creditsEarned || 0).toLocaleString() + " cr), " + data.matched + " matched" + mode + ".", false);
+        fetchEnhancedStatus(false);
+      } else {
+        showToast("Auto-Sell scan failed: " + (data.error || "Unknown error"), true);
+      }
+    } catch (e) {
+      showToast("Auto-Sell scan error: " + e.message, true);
+    }
+  });
+
+  function renderAutoBuyRules() {
+    const el = $("autobuy-rules-list");
+    if (!autoBuyRules.length) {
+      el.innerHTML = '<div class="empty-state">No Auto-Buy rules yet. Pick a preset above or edit the JSON below.</div>';
+      return;
+    }
+    el.innerHTML = autoBuyRules.map((r, idx) =>
+      '<div class="rule-card' + (r.enabled === false ? ' disabled' : '') + '">' +
+        '<div class="rule-card-hdr">' +
+          '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">' +
+            '<input type="checkbox" class="chk-abuy-toggle" data-idx="' + idx + '"' + (r.enabled !== false ? ' checked' : '') + '> ' +
+            esc(r.name || ("Rule #" + (idx + 1))) +
+          '</label>' +
+          '<div style="display:flex;gap:6px">' +
+            '<button type="button" class="btn btn-abuy-edit" data-idx="' + idx + '">Edit</button>' +
+            '<button type="button" class="btn btn-abuy-test" data-idx="' + idx + '">Test Store</button>' +
+            '<button type="button" class="btn btn-danger btn-abuy-del" data-idx="' + idx + '">Delete</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="rule-pills">' + summarizeGenericRule(r) + '</div>' +
+      '</div>'
+    ).join("");
+
+    el.querySelectorAll(".chk-abuy-toggle").forEach((chk) => {
+      chk.addEventListener("change", () => {
+        autoBuyRules[Number(chk.getAttribute("data-idx"))].enabled = chk.checked;
+        persistAutoBuyRules("Updated Auto-Buy rule.");
+      });
+    });
+    el.querySelectorAll(".btn-abuy-edit").forEach((btn) => {
+      btn.addEventListener("click", () => openRuleEditor(Number(btn.getAttribute("data-idx")), null, "autobuy"));
+    });
+    el.querySelectorAll(".btn-abuy-del").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        autoBuyRules.splice(Number(btn.getAttribute("data-idx")), 1);
+        persistAutoBuyRules("Deleted Auto-Buy rule.");
+      });
+    });
+    el.querySelectorAll(".btn-abuy-test").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const rule = autoBuyRules[Number(btn.getAttribute("data-idx"))];
+        const box = $("autobuy-preview-box");
+        box.classList.remove("hidden");
+        box.innerHTML = '<span class="muted">Testing rule against docked station store...</span>';
+        try {
+          const resp = await fetch("/api/enhanced/autobuy/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rule })
+          });
+          const data = await resp.json();
+          if (!data.ok) {
+            box.innerHTML = '<span class="neg">Preview failed: ' + esc(data.error || "Unknown error") + '</span>';
+            return;
+          }
+          if (!data.dockedWithStore) {
+            box.innerHTML = '<span class="muted">Not currently docked at a station with a store.</span>';
+            return;
+          }
+          const matches = data.matches || [];
+          let html = '<div style="margin-bottom:6px"><strong>' + esc(rule.name || "Rule") + '</strong> matched <strong>' + matches.length + '</strong> item(s) at ' + esc(data.stationName || "Station") + ' (est. -' + Math.round(data.totalCost || 0).toLocaleString() + ' cr).</div>';
+          if (matches.length) {
+            html += '<table class="data-table"><thead><tr><th>Item</th><th>iLvl</th><th>Category</th><th>Cost</th></tr></thead><tbody>';
+            for (const m of matches.slice(0, 25)) {
+              html += '<tr><td class="rarity-' + esc(m.rarity || "Standard") + '">' + esc(m.displayName) + '</td><td class="mono">' + esc(m.itemLevel) + '</td><td>' + esc(m.category) + '</td><td class="mono neg">-' + Math.round(m.cost || 0).toLocaleString() + '</td></tr>';
+            }
+            html += '</tbody></table>';
+          }
+          box.innerHTML = html;
+        } catch (e) {
+          box.innerHTML = '<span class="neg">Preview error: ' + esc(e.message) + '</span>';
+        }
+      });
+    });
+  }
+
+  async function persistAutoBuyRules(toastMsg) {
+    const raw = JSON.stringify({ rules: autoBuyRules }, null, 2);
+    $("autobuy-rules-editor").value = raw;
+    renderAutoBuyRules();
+    try {
+      const resp = await fetch("/api/enhanced/autobuy/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: raw
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        showToast(toastMsg || ("Saved " + data.ruleCount + " Auto-Buy rule(s)."), false);
+        fetchEnhancedStatus(false);
+      } else {
+        showToast("Auto-Buy rule save failed: " + (data.error || "Unknown error"), true);
+      }
+    } catch (e) {
+      showToast("Error saving Auto-Buy rules: " + e.message, true);
+    }
+  }
+
+  function renderAutoBuyEvents(events) {
+    const el = $("autobuy-events-container");
+    if (!events || !events.length) {
+      el.innerHTML = '<div class="empty-state">No Auto-Buy activity recorded this session yet.</div>';
+      return;
+    }
+    let html = '<table class="data-table"><thead><tr><th>Time</th><th>Station</th><th>Item</th><th>iLvl</th><th>Category</th><th>Rule</th><th>Cost</th><th>Action</th></tr></thead><tbody>';
+    for (const ev of events) {
+      const badge = ev.dryRun ? '<span class="muted">Dry Run</span>' : '<span class="pos">Bought</span>';
+      html += '<tr><td class="mono muted">' + esc(ev.timestamp || "") + '</td><td>' + esc(ev.stationName || "") + '</td><td class="rarity-' + esc(ev.rarity || "Standard") + '">' + esc(ev.displayName || "") + '</td><td class="mono">' + esc(ev.itemLevel ?? "") + '</td><td>' + esc(ev.category || "") + '</td><td>' + esc(ev.ruleName || "") + '</td><td class="mono neg">-' + Math.round(ev.cost || 0).toLocaleString() + '</td><td>' + badge + '</td></tr>';
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  }
+
+  async function saveAutoBuyConfig() {
+    try {
+      const payload = {
+        enabled: $("chk-autobuy-enabled").checked,
+        dryRun: $("chk-autobuy-dryrun").checked,
+        verboseLog: $("chk-autobuy-verbose").checked,
+        minCreditsReserve: Math.max(0, Number($("num-autobuy-reserve").value) || 0)
+      };
+      const resp = await fetch("/api/enhanced/autobuy/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      showToast(data.ok ? "Auto-Buy settings updated." : ("Auto-Buy config error: " + (data.error || "Unknown")), !data.ok);
+    } catch (e) {
+      showToast("Error updating Auto-Buy settings: " + e.message, true);
+    }
+  }
+
+  ["chk-autobuy-enabled", "chk-autobuy-dryrun", "chk-autobuy-verbose", "num-autobuy-reserve"].forEach((id) => {
+    $(id).addEventListener("change", saveAutoBuyConfig);
+  });
+
+  $("sel-autobuy-preset").addEventListener("change", () => {
+    const key = $("sel-autobuy-preset").value;
+    $("sel-autobuy-preset").value = "";
+    if (!key || !AUTOBUY_PRESETS[key]) return;
+    autoBuyRules.push(JSON.parse(JSON.stringify(AUTOBUY_PRESETS[key])));
+    persistAutoBuyRules("Added Auto-Buy preset.");
+  });
+
+  $("btn-autobuy-save-rules").addEventListener("click", async () => {
+    try {
+      const parsed = JSON.parse($("autobuy-rules-editor").value);
+      autoBuyRules = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.rules) ? parsed.rules : []);
+      await persistAutoBuyRules("Saved & reloaded " + autoBuyRules.length + " Auto-Buy rule(s).");
+    } catch (e) {
+      showToast("Invalid Auto-Buy JSON: " + e.message, true);
+    }
+  });
+
+  $("btn-autobuy-refresh").addEventListener("click", () => fetchEnhancedStatus(true));
+
+  $("btn-autobuy-scan").addEventListener("click", async () => {
+    try {
+      const resp = await fetch("/api/enhanced/autobuy/scan", { method: "POST" });
+      const data = await resp.json();
+      if (data.ok) {
+        if (!data.dockedWithStore) {
+          showToast("Not docked at a station with a store.", true);
+        } else {
+          const mode = data.dryRun ? " (Dry Run)" : "";
+          showToast("Auto-Buy scan at " + (data.stationName || "Station") + ": " + data.bought + " bought (-" + Math.round(data.creditsSpent || 0).toLocaleString() + " cr)" + mode + ".", false);
+        }
+        fetchEnhancedStatus(false);
+      } else {
+        showToast("Auto-Buy scan failed: " + (data.error || "Unknown error"), true);
+      }
+    } catch (e) {
+      showToast("Auto-Buy scan error: " + e.message, true);
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // Kill Log & Wave Tracker (zKillboard style)
+  // ------------------------------------------------------------------
+  let killsData = null;
+  let killsClassFilter = "";
+  let selectedKillId = null;
+
+  function fmtKillTime(iso) {
+    if (!iso) return "--";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    } catch { return iso; }
+  }
+
+  function renderKillmailDetail(kill) {
+    const box = $("zk-killmail-detail");
+    if (!kill) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    box.classList.remove("hidden");
+    const rankCls = "zk-rank-" + (kill.victimRank || "Standard");
+    box.innerHTML =
+      '<div class="zk-killmail-hdr">' +
+        '<div><span class="mono neg" style="font-weight:700">KILLMAIL #' + kill.id + '</span> &nbsp; ' +
+        '<strong style="font-size:15px">' + esc(kill.victimClass) + '</strong>' +
+        '<span class="zk-rank-badge ' + esc(rankCls) + '">' + esc(kill.victimRank || "Standard") + '</span>' +
+        ' <span class="muted">Lv ' + esc(kill.victimLevel) + '</span></div>' +
+        '<button class="btn" type="button" id="btn-close-killmail">Close</button>' +
+      '</div>' +
+      '<div class="zk-killmail-grid">' +
+        '<div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Victim Ship</span><span class="zk-km-v">' + esc(kill.victimClass) + (kill.victimSize ? " (" + esc(kill.victimSize) + ")" : "") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Faction</span><span class="zk-km-v">' + esc(kill.victimFaction || "Unknown") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Rank / Level</span><span class="zk-km-v">' + esc(kill.victimRank || "Standard") + ' · Lv ' + esc(kill.victimLevel) + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Point Value</span><span class="zk-km-v">' + esc(kill.pointValue) + '</span></div>' +
+        '</div>' +
+        '<div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Final Blow</span><span class="zk-km-v pos">' + esc(kill.killerName || "Fleet") + (kill.killerClass && kill.killerClass !== kill.killerName ? " (" + esc(kill.killerClass) + ")" : "") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Weapon</span><span class="zk-km-v">' + esc(kill.weaponName || "—") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Location</span><span class="zk-km-v">' + esc(kill.systemName || "—") + (kill.poiName ? " · " + esc(kill.poiName) : "") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Mission / Wave</span><span class="zk-km-v">' + esc(kill.missionName || "—") + (kill.waveNumber > 0 ? " (Wave " + kill.waveNumber + ")" : "") + '</span></div>' +
+          '<div class="zk-km-kv"><span class="zk-km-k">Timestamp</span><span class="zk-km-v">' + esc(fmtKillTime(kill.timestamp)) + '</span></div>' +
+        '</div>' +
+      '</div>';
+    const closeBtn = $("btn-close-killmail");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        selectedKillId = null;
+        renderKillmailDetail(null);
+      });
+    }
+  }
+
+  function renderKills(data) {
+    if (!data) return;
+    killsData = data;
+    $("count-kills").textContent = data.totalKills || 0;
+    $("zk-total-kills").textContent = (data.totalKills || 0).toLocaleString();
+    $("zk-mission-kills").textContent = "Current POI/Mission: " + (data.currentMissionKills || 0).toLocaleString();
+    $("zk-total-waves").textContent = (data.totalWaves || 0).toLocaleString();
+    $("zk-mission-waves").textContent = "Current POI/Mission: " + (data.currentMissionWaves || 0).toLocaleString();
+
+    const byClass = data.byClass || [];
+    $("zk-class-total").textContent = byClass.length + " class" + (byClass.length === 1 ? "" : "es");
+    if (byClass.length > 0) {
+      $("zk-top-class").textContent = byClass[0].shipClass;
+      $("zk-top-class-sub").textContent = byClass[0].count.toLocaleString() + " kills";
+    } else {
+      $("zk-top-class").textContent = "--";
+      $("zk-top-class-sub").textContent = "0 kills";
+    }
+
+    const byKiller = data.byKiller || [];
+    if (byKiller.length > 0) {
+      $("zk-top-killer").textContent = byKiller[0].killer;
+      $("zk-top-killer-sub").textContent = byKiller[0].count.toLocaleString() + " kills";
+    } else {
+      $("zk-top-killer").textContent = "--";
+      $("zk-top-killer-sub").textContent = "0 kills";
+    }
+
+    $("zk-wave-context").textContent = data.currentPoi ? (data.currentPoi + (data.currentMission ? " · " + data.currentMission : "")) : "";
+
+    // Class pills
+    const pillsEl = $("zk-class-pills");
+    if (!byClass.length) {
+      pillsEl.innerHTML = '<span class="muted" style="font-size:11px">No kills recorded yet.</span>';
+    } else {
+      let ph = "";
+      for (const c of byClass) {
+        const active = killsClassFilter && killsClassFilter.toLowerCase() === c.shipClass.toLowerCase();
+        ph += '<button type="button" class="zk-pill' + (active ? ' active' : '') + '" data-cls="' + esc(c.shipClass) + '">' +
+          '<span>' + esc(c.shipClass) + (c.isDrone ? ' <span class="muted">(Drone)</span>' : '') + '</span>' +
+          '<span class="zk-pill-cnt">' + c.count + '</span></button>';
+      }
+      pillsEl.innerHTML = ph;
+      pillsEl.querySelectorAll(".zk-pill").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const cls = btn.getAttribute("data-cls") || "";
+          killsClassFilter = (killsClassFilter.toLowerCase() === cls.toLowerCase()) ? "" : cls;
+          renderKills(killsData);
+        });
+      });
+    }
+
+    $("kills-filter-badge").textContent = killsClassFilter ? ("Filter: " + killsClassFilter) : "";
+
+    // Wave list
+    const waveEl = $("zk-wave-list");
+    const waves = data.waves || [];
+    if (!waves.length) {
+      waveEl.innerHTML = '<span class="muted" style="font-size:11px">No reinforcement waves spawned yet.</span>';
+    } else {
+      let wh = "";
+      for (const w of waves.slice(0, 50)) {
+        const comp = (w.units || []).map((u) => u.count + "x " + u.shipClass + (u.rank && u.rank !== "Standard" ? " [" + u.rank + "]" : "")).join(", ");
+        wh += '<div class="zk-wave-row">' +
+          '<div><span class="zk-wave-badge">WAVE ' + w.waveNumber + '</span> <span class="mono">' + w.unitCount + ' ships</span> — ' + esc(comp) + '</div>' +
+          '<div class="mono muted" style="white-space:nowrap">' + esc(fmtKillTime(w.timestamp)) + '</div>' +
+        '</div>';
+      }
+      waveEl.innerHTML = wh;
+    }
+
+    // Killmail table
+    const kills = (data.kills || []).filter((k) => !killsClassFilter || (k.victimClass || "").toLowerCase() === killsClassFilter.toLowerCase());
+    if (selectedKillId != null) {
+      const found = (data.kills || []).find((k) => k.id === selectedKillId);
+      renderKillmailDetail(found || null);
+    }
+
+    const tblEl = $("kills-table-container");
+    if (!kills.length) {
+      tblEl.innerHTML = '<div class="empty-state">No kills recorded yet. Destroy enemy ships to populate the killboard.</div>';
+      return;
+    }
+    let th = '<table class="data-table"><thead><tr>' +
+      '<th>Time</th><th>Victim</th><th>Faction</th><th>Final Blow</th><th>Location / Mission</th><th>Wave</th><th>Pts</th>' +
+      '</tr></thead><tbody>';
+    for (const k of kills.slice(0, 200)) {
+      const rankCls = "zk-rank-" + (k.victimRank || "Standard");
+      const rankHtml = (k.victimRank && k.victimRank !== "Standard")
+        ? '<span class="zk-rank-badge ' + esc(rankCls) + '">' + esc(k.victimRank) + '</span>'
+        : '';
+      th += '<tr class="zk-kill-row" data-kill-id="' + k.id + '">' +
+        '<td class="mono muted">' + esc(fmtKillTime(k.timestamp)) + '</td>' +
+        '<td><strong>' + esc(k.victimClass) + '</strong>' + rankHtml +
+          '<div class="muted" style="font-size:10px">' + esc(k.victimSize || (k.isDrone ? "Drone" : "")) + (k.victimLevel ? " · Lv " + k.victimLevel : "") + '</div></td>' +
+        '<td>' + esc(k.victimFaction || "—") + '</td>' +
+        '<td><span class="pos">' + esc(k.killerName || "Fleet") + '</span>' +
+          (k.weaponName ? '<div class="muted" style="font-size:10px">' + esc(k.weaponName) + '</div>' : '') + '</td>' +
+        '<td>' + esc(k.poiName || k.systemName || "—") +
+          (k.missionName ? '<div class="muted" style="font-size:10px">' + esc(k.missionName) + '</div>' : '') + '</td>' +
+        '<td class="mono">' + (k.waveNumber > 0 ? '<span class="zk-wave-badge">W' + k.waveNumber + '</span>' : '<span class="muted">—</span>') + '</td>' +
+        '<td class="mono">' + esc(k.pointValue || 0) + '</td>' +
+      '</tr>';
+    }
+    th += '</tbody></table>';
+    tblEl.innerHTML = th;
+    tblEl.querySelectorAll(".zk-kill-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const id = parseInt(row.getAttribute("data-kill-id"), 10);
+        selectedKillId = id;
+        const found = (killsData && killsData.kills || []).find((x) => x.id === id);
+        renderKillmailDetail(found || null);
+      });
+    });
+  }
+
+  async function fetchKills() {
+    try {
+      const resp = await fetch("/api/kills");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      renderKills(data);
+    } catch { }
+  }
+
+  $("btn-clear-kills").addEventListener("click", async () => {
+    try {
+      await fetch("/api/kills/clear", { method: "POST" });
+      killsClassFilter = "";
+      selectedKillId = null;
+      renderKillmailDetail(null);
+      fetchKills();
+    } catch { }
+  });
+
   // Boot
   fetchState();
   fetchHistory();
+  fetchKills();
   fetchEnhancedStatus(false);
   connectSSE();
   historyTimer = setInterval(fetchHistory, 30000);
+  setInterval(fetchKills, 3000);
 })();
 </script>
 </body>
