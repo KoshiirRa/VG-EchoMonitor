@@ -1595,6 +1595,7 @@
           <button type="button" class="btn enhanced-subtab active" data-subtab="autofav" style="font-weight:600">Auto-Favorite <span id="subcount-autofav" class="mono muted" style="margin-left:4px">0/0</span></button>
           <button type="button" class="btn enhanced-subtab" data-subtab="autosell" style="font-weight:600">Auto-Sell <span id="subcount-autosell" class="mono muted" style="margin-left:4px">0/0</span></button>
           <button type="button" class="btn enhanced-subtab" data-subtab="autobuy" style="font-weight:600">Auto-Buy <span id="subcount-autobuy" class="mono muted" style="margin-left:4px">0/0</span></button>
+          <button type="button" class="btn enhanced-subtab" data-subtab="drones" style="font-weight:600">Drone Loadouts <span id="subcount-drones" class="mono muted" style="margin-left:4px">0</span></button>
         </div>
 
         <!-- Sub-tab: Auto-Favorite -->
@@ -1695,6 +1696,7 @@
                 <option value="standard_junk">Standard Rarity Equipment</option>
                 <option value="enhanced_no_aspect">Enhanced (No Aspect) Equipment</option>
                 <option value="low_ilvl">Low iLvl (&lt; 70) Non-Legendary</option>
+                <option value="data_fragments">Data Fragments</option>
               </select>
             </div>
           </div>
@@ -1751,6 +1753,7 @@
               <select id="sel-autobuy-preset" class="filter-select" aria-label="Add Auto-Buy preset">
                 <option value="">+ Add Preset...</option>
                 <option value="unknown_bp">All Unknown Blueprints</option>
+                <option value="officer_upgrades">Officer Upgrade Items (Usable)</option>
                 <option value="exotic_gear">Exotic+ Store Equipment</option>
                 <option value="legendary_gear">Legendary Store Equipment</option>
               </select>
@@ -1774,6 +1777,48 @@
             <span>Recent Auto-Buy Activity</span>
           </div>
           <div id="autobuy-events-container"></div>
+        </div>
+
+        <!-- Sub-tab: Drone Loadouts -->
+        <div id="enhanced-sub-drones" class="hidden">
+          <div class="section-heading">
+            <span>Fleet Drone Loadouts <span id="drones-status-badge" class="mono muted" style="font-size:11px;margin-left:8px"></span></span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btn-drones-refresh" class="btn" type="button">Refresh</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:14px">
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="chk-drones-enabled" type="checkbox"> <span>Drone Loadouts Enabled</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="chk-drones-autoswap" type="checkbox"> <span>ECHO Auto-Swap</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="chk-drones-wrecks" type="checkbox"> <span>Swap to Salvage for Wrecks</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input id="chk-drones-hold-mission" type="checkbox"> <span>Hold Combat Mission Turn-in for Salvage</span>
+              </label>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+              <label style="font-size:12px">Combat: <input id="inp-drones-combat" type="text" class="filter-select" style="width:110px"></label>
+              <label style="font-size:12px">Salvage: <input id="inp-drones-salvage" type="text" class="filter-select" style="width:110px"></label>
+              <label style="font-size:12px">Mining: <input id="inp-drones-mining" type="text" class="filter-select" style="width:110px"></label>
+              <button id="btn-drones-save-config" class="btn" type="button">Save ECHO Settings</button>
+            </div>
+          </div>
+
+          <div class="section-heading">
+            <span>Saved Fleet Presets</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <input id="inp-drones-capture-name" type="text" class="filter-select" placeholder="Preset name (e.g. Combat)" value="Combat" style="width:170px">
+              <button id="btn-drones-capture" class="btn" type="button">Capture Current Fleet</button>
+            </div>
+          </div>
+          <div id="drones-presets-container"></div>
         </div>
 
         <!-- Shared Visual Rule Editor (Auto-Favorite / Auto-Sell / Auto-Buy) -->
@@ -1837,9 +1882,12 @@
               <label for="rf-max-price">Max Unit Price (credits, blank = no cap)</label>
               <input id="rf-max-price" class="filter-input mono" type="number" min="0" step="1000" style="width:100%" placeholder="No cap">
             </div>
-            <div class="rule-field" style="display:flex;align-items:flex-end;padding-bottom:6px">
+            <div class="rule-field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:6px;flex-wrap:wrap">
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
                 <input id="rf-only-unknown-bp" type="checkbox" checked> <span>Only Unknown Blueprints</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+                <input id="rf-buy-full-stack" type="checkbox"> <span>Buy Full Stack</span>
               </label>
             </div>
           </div>
@@ -1853,6 +1901,8 @@
               <button type="button" class="pill-toggle" data-cat="Drone">Drone</button>
               <button type="button" class="pill-toggle" data-cat="DefensiveTurret">DefensiveTurret</button>
               <button type="button" class="pill-toggle" data-cat="Blueprint">Blueprint</button>
+              <button type="button" class="pill-toggle" data-cat="Usable">Usable</button>
+              <button type="button" class="pill-toggle" data-cat="Data">Data</button>
             </div>
           </div>
 
@@ -3572,6 +3622,10 @@
       $("autobuy-session-stats").textContent = "Session: " + (abuy.sessionBoughtCount || 0) + " bought · -" + Math.round(abuy.sessionCreditsSpent || 0).toLocaleString() + " cr";
       renderAutoBuyEvents(abuy.recentEvents || []);
 
+      if (data.droneLoadouts && Array.isArray(data.droneLoadouts.presets)) {
+        $("subcount-drones").textContent = String(data.droneLoadouts.presets.length);
+      }
+
       if (enhancedCatalog.substats.length === 0) {
         fetchEnhancedCatalog();
       }
@@ -3742,6 +3796,7 @@
     $("rf-autobuy-fields").classList.toggle("hidden", editingRuleTarget !== "autobuy");
     $("rf-max-price").value = rule.maxPrice != null ? String(rule.maxPrice) : "";
     $("rf-only-unknown-bp").checked = rule.onlyUnknownBlueprints !== false;
+    $("rf-buy-full-stack").checked = rule.buyFullStack === true;
     $("rf-name").value = rule.name || "";
     $("rf-min-rarity").value = rule.minRarity || "";
     $("rf-max-rarity").value = rule.maxRarity || "";
@@ -3785,6 +3840,7 @@
     };
     if (editingRuleTarget === "autobuy") {
       rule.onlyUnknownBlueprints = $("rf-only-unknown-bp").checked;
+      if ($("rf-buy-full-stack").checked) rule.buyFullStack = true;
       const mp = $("rf-max-price").value.trim();
       if (mp !== "") rule.maxPrice = Math.max(0, Number(mp));
     }
@@ -4086,11 +4142,13 @@
   const AUTOSELL_PRESETS = {
     standard_junk: { name: "Sell Standard Equipment", enabled: true, maxRarity: "Standard" },
     enhanced_no_aspect: { name: "Sell Enhanced (No Aspect)", enabled: true, maxRarity: "Enhanced", hasAspect: false },
-    low_ilvl: { name: "Sell Low iLvl (< 70) Non-Legendary", enabled: true, maxRarity: "Exotic", maxItemLevel: 69 }
+    low_ilvl: { name: "Sell Low iLvl (< 70) Non-Legendary", enabled: true, maxRarity: "Exotic", maxItemLevel: 69 },
+    data_fragments: { name: "Sell Data Fragments", enabled: true, categories: ["Data"] }
   };
 
   const AUTOBUY_PRESETS = {
     unknown_bp: { name: "Buy Unknown Blueprints", enabled: true, categories: ["Blueprint"], onlyUnknownBlueprints: true },
+    officer_upgrades: { name: "Buy Officer Upgrade Items", enabled: true, categories: ["Usable"], nameContains: ["Neural Patch", "Synaptic Implant", "Cortex Augment", "Neuro Core"], maxPrice: 10000000, buyFullStack: true },
     exotic_gear: { name: "Buy Exotic+ Store Equipment", enabled: true, minRarity: "Exotic", categories: ["Turret", "Module", "Booster", "Drone", "DefensiveTurret"] },
     legendary_gear: { name: "Buy Legendary Store Equipment", enabled: true, minRarity: "Legendary" }
   };
@@ -4102,7 +4160,106 @@
       $("enhanced-sub-autofav").classList.toggle("hidden", target !== "autofav");
       $("enhanced-sub-autosell").classList.toggle("hidden", target !== "autosell");
       $("enhanced-sub-autobuy").classList.toggle("hidden", target !== "autobuy");
+      $("enhanced-sub-drones").classList.toggle("hidden", target !== "drones");
+      if (target === "drones") {
+        loadDroneLoadoutsTab();
+      }
     });
+  });
+
+  async function loadDroneLoadoutsTab() {
+    try {
+      const [stResp, storeResp] = await Promise.all([
+        fetch("/api/enhanced/status", { cache: "no-store" }),
+        fetch("/api/enhanced/drones/store", { cache: "no-store" })
+      ]);
+      if (!stResp.ok || !storeResp.ok) return;
+      const st = await stResp.json();
+      const store = await storeResp.json();
+      const dl = st.droneLoadouts || {};
+      const b = store.echoBindings || dl.echoBindings || {};
+      const presets = store.presets || {};
+      const presetNames = Object.keys(presets).sort((a, c) => a.localeCompare(c));
+
+      $("subcount-drones").textContent = String(presetNames.length);
+      $("drones-status-badge").textContent =
+        (dl.canSwapNow ? ("Ready (" + (dl.swapStatus || "OK") + ")") : ("Locked: " + (dl.swapStatus || "Skill required")))
+        + (dl.lastAppliedPreset ? (" · Last: " + dl.lastAppliedPreset + (dl.lastSwapReason ? " (" + dl.lastSwapReason + ")" : "")) : "");
+
+      $("chk-drones-enabled").checked = dl.enabled !== false;
+      $("chk-drones-autoswap").checked = !!b.autoSwapEnabled;
+      $("chk-drones-wrecks").checked = !!b.swapToSalvageForWrecks;
+      $("chk-drones-hold-mission").checked = b.holdForPostMissionSalvage !== false;
+      if (document.activeElement !== $("inp-drones-combat")) $("inp-drones-combat").value = b.combatPreset || "";
+      if (document.activeElement !== $("inp-drones-salvage")) $("inp-drones-salvage").value = b.salvagePreset || "";
+      if (document.activeElement !== $("inp-drones-mining")) $("inp-drones-mining").value = b.miningPreset || "";
+
+      const container = $("drones-presets-container");
+      if (presetNames.length === 0) {
+        container.innerHTML = '<div class="empty-state">No drone presets saved yet. Configure your fleet in-game and click Capture Current Fleet above (or press Alt+D in-game).</div>';
+        return;
+      }
+
+      container.innerHTML = presetNames.map((name) => {
+        const p = presets[name] || {};
+        const shipEntries = Object.values(p.ships || {});
+        const shipSummary = shipEntries.map((s) => esc(s.shipName || s.shipGuid) + " (" + ((s.slots || []).filter(Boolean).length) + ")").join(", ");
+        return '<div class="card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
+          + '<div><div style="font-weight:600">' + esc(name) + ' <span class="mono muted" style="font-size:11px">(' + shipEntries.length + ' ship' + (shipEntries.length === 1 ? '' : 's') + ')</span></div>'
+          + '<div class="muted" style="font-size:11px;margin-top:2px">' + (shipSummary || 'No ships') + '</div></div>'
+          + '<div style="display:flex;gap:8px">'
+          + '<button type="button" class="btn btn-drone-apply" data-preset="' + esc(name) + '"' + (dl.canSwapNow ? '' : ' disabled') + '>Apply to Fleet</button>'
+          + '<button type="button" class="btn btn-drone-delete" data-preset="' + esc(name) + '">Delete</button>'
+          + '</div></div>';
+      }).join("");
+
+      container.querySelectorAll(".btn-drone-apply").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const preset = btn.getAttribute("data-preset");
+          const r = await fetch("/api/enhanced/drones/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset }) });
+          const res = await r.json();
+          showToast(res.message || (res.ok ? ("Applied " + preset) : (res.error || "Failed")), !res.ok);
+          loadDroneLoadoutsTab();
+        });
+      });
+
+      container.querySelectorAll(".btn-drone-delete").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const preset = btn.getAttribute("data-preset");
+          const r = await fetch("/api/enhanced/drones/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset }) });
+          const res = await r.json();
+          showToast(res.ok ? ("Deleted '" + preset + "'.") : "Delete failed.", !res.ok);
+          loadDroneLoadoutsTab();
+        });
+      });
+    } catch (e) {
+      console.error("Failed to load drone loadouts:", e);
+    }
+  }
+
+  $("btn-drones-refresh")?.addEventListener("click", () => loadDroneLoadoutsTab());
+  $("btn-drones-capture")?.addEventListener("click", async () => {
+    const preset = ($("inp-drones-capture-name").value || "").trim();
+    if (!preset) { showToast("Enter a preset name first.", true); return; }
+    const r = await fetch("/api/enhanced/drones/capture", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset }) });
+    const res = await r.json();
+    showToast(res.message || (res.ok ? ("Captured " + preset) : (res.error || "Failed")), !res.ok);
+    loadDroneLoadoutsTab();
+  });
+  $("btn-drones-save-config")?.addEventListener("click", async () => {
+    const payload = {
+      enabled: $("chk-drones-enabled").checked,
+      autoSwapEnabled: $("chk-drones-autoswap").checked,
+      swapToSalvageForWrecks: $("chk-drones-wrecks").checked,
+      holdForPostMissionSalvage: $("chk-drones-hold-mission").checked,
+      combatPreset: ($("inp-drones-combat").value || "").trim(),
+      salvagePreset: ($("inp-drones-salvage").value || "").trim(),
+      miningPreset: ($("inp-drones-mining").value || "").trim()
+    };
+    const r = await fetch("/api/enhanced/drones/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const res = await r.json();
+    showToast(res.ok ? "Saved ECHO Drone Loadout settings." : (res.error || "Save failed."), !res.ok);
+    loadDroneLoadoutsTab();
   });
 
   function summarizeGenericRule(r) {
@@ -4114,6 +4271,7 @@
     if (Array.isArray(r.categories) && r.categories.length) pills.push("Cat: " + r.categories.join(", "));
     if (Array.isArray(r.nameContains) && r.nameContains.length) pills.push("Name: " + r.nameContains.join(", "));
     if (r.onlyUnknownBlueprints === true) pills.push("Unknown Blueprints Only");
+    if (r.buyFullStack === true) pills.push("Buy Full Stack");
     if (r.maxPrice != null) pills.push("Max Price: " + Number(r.maxPrice).toLocaleString() + " cr");
     return pills.length ? pills.map((p) => '<span class="pill">' + esc(p) + '</span>').join("") : '<span class="muted" style="font-size:11px">Matches all items</span>';
   }
