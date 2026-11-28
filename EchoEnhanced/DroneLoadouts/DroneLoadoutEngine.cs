@@ -44,6 +44,7 @@ namespace EchoEnhanced.DroneLoadouts
         public string LastSwapReason { get; private set; } = string.Empty;
         public float LastCombatSeenTime { get; private set; } = -999f;
         public bool InOpportunisticSalvage { get; private set; }
+        private float _lastFleetDeployCheckTime = -999f;
 
         public DroneLoadoutEngine(EchoEnhancedConfig config, string bepInExConfigDir)
         {
@@ -429,6 +430,49 @@ namespace EchoEnhanced.DroneLoadouts
         {
             var poi = Source.Galaxy.MapPointOfInterest.current;
             return poi != null && poi.hasPayload;
+        }
+
+        public void TickFleetAutoDeploy()
+        {
+            if (!_config.DroneLoadoutsEnabled.Value) return;
+
+            float now = Time.unscaledTime;
+            if (now - _lastFleetDeployCheckTime < 1.0f) return;
+            _lastFleetDeployCheckTime = now;
+
+            if (GamePlayer.current == null) return;
+            if (SpaceStationInterior.instance != null || PersonalHangar.arenaMode) return;
+            if (BasePoiManager.current == null) return;
+
+            var poi = Source.Galaxy.MapPointOfInterest.current;
+            if (poi == null || poi is Source.Galaxy.POI.SpaceStation) return;
+
+            bool hasSalvage = HasSalvageableWrecksAtCurrentPoi();
+            bool hasMining = poi is Source.Galaxy.POI.Mining;
+            bool hasHostiles = HasHostilesAtCurrentPoi();
+
+            if (!hasSalvage && !hasMining && !hasHostiles) return;
+
+            var fleetShips = GetActiveFleetDroneShips();
+            foreach (var shipData in fleetShips)
+            {
+                var liveShip = shipData.unit as SpaceShip;
+                var droneBay = liveShip?.droneBayModule;
+                if (liveShip == null || droneBay == null) continue;
+                if (liveShip.travelling || liveShip.inShipYard || !droneBay.active || !droneBay.isActiveAndEnabled) continue;
+                if (droneBay.playerRecalled || droneBay.returning || droneBay.deploying || droneBay.shouldDeploy) continue;
+                if (!droneBay.AreDronesDocked()) continue;
+
+                var breakdown = droneBay.GetDronePowerBreakdown();
+                bool match = (hasSalvage && breakdown.salvage > 0f)
+                    || (hasMining && (breakdown.miningSurface > 0f || breakdown.miningCore > 0f))
+                    || (hasHostiles && breakdown.combat > 0f);
+
+                if (match)
+                {
+                    droneBay.DeployDrones();
+                }
+            }
         }
 
         public bool ShouldHoldForPostMissionSalvage()
