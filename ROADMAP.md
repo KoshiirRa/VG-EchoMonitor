@@ -34,3 +34,8 @@ Planned features and milestone history spanning the in-game **EchoMonitor** BepI
 
 ### Milestone 10 (Planned — ECHO Enhanced) ⏳ — Auto-Extract Aspects
 - Automatically extract aspects from modules that meet user-defined criteria (e.g., rarity, tier/level, target aspect/substats, or module type).
+
+---
+
+### Milestone 11 (Planned — ECHO Enhanced) ⏳ — Automated Exploration (Visit Unvisited Systems)
+- Automatically plot and fly routes through unvisited star systems so ECHO can explore, reveal fog-of-war / jumpgates, and discover stations & POIs hands-free.
