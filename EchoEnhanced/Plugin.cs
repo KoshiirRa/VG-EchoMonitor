@@ -3,7 +3,6 @@ using BepInEx;
 using BepInEx.Logging;
 using Behaviour.Managers;
 using Behaviour.UI.Spacestation;
-using EchoEnhanced.AiSearch;
 using EchoEnhanced.AutoBuy;
 using EchoEnhanced.AutoFavorite;
 using EchoEnhanced.AutoSell;
@@ -30,7 +29,6 @@ namespace EchoEnhanced
         private DroneLoadoutEngine _droneLoadouts;
         private DroneLoadoutOverlay _droneOverlay;
         private DirectLlmClient _directLlm;
-        private CloudflareAiSearchClient _aiSearch;
         private NaturalLanguageRuleEngine _nlRules;
         private GamePlayer _lastScannedPlayer;
         private Source.Galaxy.POI.SpaceStation _lastDockedShopStation;
@@ -52,8 +50,7 @@ namespace EchoEnhanced
             _droneLoadouts = new DroneLoadoutEngine(_config, Paths.ConfigPath);
             _droneOverlay = new DroneLoadoutOverlay(_droneLoadouts, _config);
             _directLlm = new DirectLlmClient(Paths.ConfigPath);
-            _aiSearch = new CloudflareAiSearchClient(Paths.ConfigPath);
-            _nlRules = new NaturalLanguageRuleEngine(_directLlm, _aiSearch, _autoFavorite, _autoSell, _autoBuy);
+            _nlRules = new NaturalLanguageRuleEngine(_directLlm, _autoFavorite, _autoSell, _autoBuy);
 
             InventoryPatches.AutoFavorite = _autoFavorite;
             InventoryPatches.AutoSell = _autoSell;
@@ -80,7 +77,7 @@ namespace EchoEnhanced
                     { "autoSell", _autoSell.GetStatusObject() },
                     { "autoBuy", _autoBuy.GetStatusObject() },
                     { "droneLoadouts", _droneLoadouts.GetStatusObject() },
-                    { "aiSearch", _nlRules.GetStatusObject() }
+                    { "naturalLanguage", _nlRules.GetStatusObject() }
                 }.ToString();
             });
 
@@ -266,9 +263,6 @@ namespace EchoEnhanced
                     return new JsonObject { { "ok", false }, { "error", ex.Message } }.ToString();
                 }
             });
-
-            EchoMonitor.Plugin.RegisterExtensionRoute("POST", "/api/enhanced/aisearch/query",
-                body => _nlRules.QueryAiSearchJson(body));
 
             EchoMonitor.Plugin.RegisterExtensionRoute("POST", "/api/enhanced/nl/rule/parse",
                 body => _nlRules.ParseRuleJson(body));

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using EchoEnhanced.AiSearch;
 using EchoEnhanced.AutoBuy;
 using EchoEnhanced.AutoFavorite;
 using EchoEnhanced.AutoSell;
@@ -50,7 +49,6 @@ namespace EchoEnhanced.NaturalLanguage
             + "Omit any optional fields inside \"rule\" that the user did not specify. Return ONLY valid JSON.";
 
         private readonly DirectLlmClient _directLlm;
-        private readonly CloudflareAiSearchClient _aiSearch;
         private readonly AutoFavoriteEngine _autoFavorite;
         private readonly AutoSellEngine _autoSell;
         private readonly AutoBuyEngine _autoBuy;
@@ -59,13 +57,11 @@ namespace EchoEnhanced.NaturalLanguage
 
         public NaturalLanguageRuleEngine(
             DirectLlmClient directLlm,
-            CloudflareAiSearchClient aiSearch,
             AutoFavoriteEngine autoFavorite,
             AutoSellEngine autoSell,
             AutoBuyEngine autoBuy)
         {
             _directLlm = directLlm;
-            _aiSearch = aiSearch;
             _autoFavorite = autoFavorite;
             _autoSell = autoSell;
             _autoBuy = autoBuy;
@@ -74,7 +70,6 @@ namespace EchoEnhanced.NaturalLanguage
         public JsonObject GetStatusObject()
         {
             bool llmOk = _directLlm.IsConfigured(out _, out _, out string llmModel, out _);
-            bool cfOk = _aiSearch.IsConfigured(out _, out _, out string instanceId, out _);
             int pendingCount;
             lock (_lock)
             {
@@ -84,63 +79,11 @@ namespace EchoEnhanced.NaturalLanguage
 
             return new JsonObject
             {
-                { "activeProvider", llmOk ? "directLlm" : (cfOk ? "cloudflareAiSearch" : "none") },
-                { "directLlmConfigured", llmOk },
-                { "directLlmModel", llmModel },
-                { "directLlmConfigPath", _directLlm.ConfigPath },
-                { "aiSearchConfigured", cfOk },
-                { "aiSearchInstanceId", instanceId },
-                { "aiSearchConfigPath", _aiSearch.ConfigPath },
+                { "configured", llmOk },
+                { "model", llmModel },
+                { "configPath", _directLlm.ConfigPath },
                 { "pendingDrafts", pendingCount }
             };
-        }
-
-        public string QueryAiSearchJson(string rawBody)
-        {
-            try
-            {
-                JsonValue root = string.IsNullOrWhiteSpace(rawBody) ? JsonValue.Null : JsonValue.Parse(rawBody);
-                string query = root.IsJsonObject && root.AsJsonObject["query"].IsString
-                    ? root.AsJsonObject["query"].AsString.Trim()
-                    : string.Empty;
-                int maxResults = root.IsJsonObject && root.AsJsonObject["maxResults"].IsNumber
-                    ? root.AsJsonObject["maxResults"].AsInteger
-                    : 5;
-
-                if (string.IsNullOrWhiteSpace(query))
-                {
-                    return new JsonObject { { "ok", false }, { "error", "Missing 'query' field." } }.ToString();
-                }
-
-                var res = _aiSearch.Search(query, maxResults);
-                if (!res.Ok)
-                {
-                    return new JsonObject { { "ok", false }, { "error", res.Error } }.ToString();
-                }
-
-                var chunks = new JsonArray();
-                for (int i = 0; i < res.Chunks.Count; i++)
-                {
-                    var c = res.Chunks[i];
-                    chunks.Add(new JsonObject
-                    {
-                        { "filename", c.Filename },
-                        { "score", c.Score },
-                        { "text", c.Text }
-                    });
-                }
-
-                return new JsonObject
-                {
-                    { "ok", true },
-                    { "query", query },
-                    { "chunks", chunks }
-                }.ToString();
-            }
-            catch (Exception ex)
-            {
-                return new JsonObject { { "ok", false }, { "error", ex.Message } }.ToString();
-            }
         }
 
         public string ParseRuleJson(string rawBody)
@@ -190,24 +133,6 @@ namespace EchoEnhanced.NaturalLanguage
 
                     rawModelResponse = llmRes.Content;
                     sources.Add($"live-catalog ({modelName})");
-                }
-                else if (_aiSearch.IsConfigured(out _, out _, out _, out _))
-                {
-                    var aiRes = _aiSearch.AiSearch(SystemPrompt, userPrompt, maxResults: 6);
-                    if (!aiRes.Ok)
-                    {
-                        return new JsonObject { { "ok", false }, { "error", aiRes.Error } }.ToString();
-                    }
-
-                    rawModelResponse = aiRes.ResponseText;
-                    for (int i = 0; i < aiRes.Chunks.Count; i++)
-                    {
-                        string fn = aiRes.Chunks[i].Filename;
-                        if (!string.IsNullOrWhiteSpace(fn) && !sources.Contains(fn))
-                        {
-                            sources.Add(fn);
-                        }
-                    }
                 }
                 else
                 {
