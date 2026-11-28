@@ -55,6 +55,55 @@ Automatically purchases matching **blueprints** and **equipment/modules/turrets*
   - `POST /api/enhanced/autobuy/preview`
   - `POST /api/enhanced/autobuy/scan`
 
+### Fleet Drone Loadouts
+Save, manage, and apply fleet-wide drone presets across your entire fleet (`BepInEx\config\EchoEnhanced\drone_loadouts.json`).
+
+- **In-Game Overlay**: Press `Alt+D` to open the Fleet Drone Loadouts overlay to capture current loadouts, apply presets, or delete presets.
+- **Quick-Apply Hotkeys**: `Alt+1` (Combat), `Alt+2` (Salvage), `Alt+3` (Mining).
+- **Auto-Swap by ECHO Mission Type**: Automatically switches your fleet to the matching drone preset when ECHO changes mission type.
+- **Web UI**: Managed from the **Drone Loadouts** sub-tab in the EchoMonitor dashboard.
+- **HTTP API (via EchoMonitor)**:
+  - `GET /api/enhanced/drones/store`
+  - `POST /api/enhanced/drones/config`
+  - `POST /api/enhanced/drones/apply`
+  - `POST /api/enhanced/drones/capture`
+  - `POST /api/enhanced/drones/delete`
+
+### Natural Language Rule Generation
+Compile plain-English instructions (e.g., *"Auto-buy any unknown ship blueprints under 500k credits"* or *"Favorite Legendary turrets iLvl 90+ with Punch Through or 2+ of Crit Damage, Reload Speed"*) into validated JSON rules for **Auto-Favorite**, **Auto-Sell**, or **Auto-Buy**.
+
+#### Provider Configuration
+`NaturalLanguageRuleEngine` prefers **Direct LLM** (any OpenAI-compatible Chat Completions endpoint) and falls back to **Cloudflare AI Search** if Direct LLM is not configured.
+
+1. **Direct LLM (Recommended)** — `BepInEx\config\EchoEnhanced\llm.json` (an `llm.example.json` template is auto-created on first run):
+   ```json
+   {
+     "endpoint": "https://api.openai.com/v1/chat/completions",
+     "apiKey": "PASTE_YOUR_API_KEY_HERE",
+     "model": "gpt-4o-mini"
+   }
+   ```
+   - Works with **OpenAI**, **Gemini** (`https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`), **Groq**, **OpenRouter**, **Cloudflare Workers AI**, or local **Ollama** (`http://localhost:11434/v1/chat/completions` with an empty `apiKey`).
+   - Environment variable overrides: `ECHO_LLM_ENDPOINT`, `ECHO_LLM_API_KEY`, `ECHO_LLM_MODEL` (values in `llm.json` take precedence if present).
+
+2. **Cloudflare AI Search (Optional / Grounding Fallback)** — `BepInEx\config\EchoEnhanced\cloudflare.json` (`cloudflare.example.json` auto-created on first run):
+   ```json
+   {
+     "accountId": "YOUR_CLOUDFLARE_ACCOUNT_ID",
+     "apiToken": "PASTE_YOUR_CLOUDFLARE_API_TOKEN_HERE",
+     "instanceId": "vg-codebase-private"
+   }
+   ```
+   - Environment variable overrides: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_AI_SEARCH_INSTANCE`.
+
+#### Draft -> Confirm Workflow & HTTP API
+Parsed rules are **never applied automatically** — they are stored as a temporary pending draft (`draftId`) with a human-readable summary and preview JSON until explicitly confirmed:
+
+- `POST /api/enhanced/nl/rule/parse` — Body: `{"instruction": "...", "target": "autofav|autosell|autobuy"}` (target is optional; inferred if omitted). Returns `{ok, draftId, target, summary, rule, sources}`.
+- `POST /api/enhanced/nl/rule/confirm` — Body: `{"draftId": "..."}`. Commits the drafted rule to the target rule file (`auto_favorite_rules.json`, `auto_sell_rules.json`, or `auto_buy_rules.json`).
+- `POST /api/enhanced/nl/rule/cancel` — Body: `{"draftId": "..."}`. Discards the pending draft.
+- `POST /api/enhanced/aisearch/query` — Body: `{"query": "...", "maxResults": 5}`. Queries the configured Cloudflare AI Search instance directly.
+
 ## Building (via `dev-vm`)
 
 ```bash
